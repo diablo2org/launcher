@@ -1,0 +1,517 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://diablo2.org/schema/server-profile/1.json",
+  "title": "Server profile",
+  "description": "How a Diablo II private server describes itself to the launcher. See docs/SPEC.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "id",
+    "name",
+    "version",
+    "hosts",
+    "game",
+    "gateways",
+    "channels"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schema": {
+      "const": 1
+    },
+    "id": {
+      "$ref": "#/$defs/id"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 48
+    },
+    "summary": {
+      "type": "string",
+      "maxLength": 200
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "minLauncher": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "links": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "website": {
+          "$ref": "#/$defs/httpsUrl"
+        },
+        "discord": {
+          "$ref": "#/$defs/httpsUrl"
+        },
+        "forum": {
+          "$ref": "#/$defs/httpsUrl"
+        },
+        "trade": {
+          "$ref": "#/$defs/httpsUrl"
+        },
+        "wiki": {
+          "$ref": "#/$defs/httpsUrl"
+        },
+        "register": {
+          "$ref": "#/$defs/httpsUrl"
+        },
+        "support": {
+          "$ref": "#/$defs/httpsUrl"
+        }
+      }
+    },
+    "branding": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "logo": {
+          "$ref": "#/$defs/asset"
+        },
+        "background": {
+          "$ref": "#/$defs/asset"
+        },
+        "accent": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "backgroundHasLogo": {
+          "type": "boolean",
+          "default": false,
+          "description": "The background image already shows the logo, so the launch screen doesn't draw it again."
+        }
+      }
+    },
+    "hosts": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$"
+      }
+    },
+    "game": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "baseArchives"
+      ],
+      "properties": {
+        "version": {
+          "enum": [
+            "1.07",
+            "1.08",
+            "1.09b",
+            "1.09d",
+            "1.10f",
+            "1.11b",
+            "1.12a",
+            "1.13c",
+            "1.13d",
+            "1.14d"
+          ]
+        },
+        "expansion": {
+          "type": "boolean",
+          "default": true
+        },
+        "baseArchives": {
+          "enum": [
+            "parent",
+            "link"
+          ]
+        },
+        "saves": {
+          "enum": [
+            "shared",
+            "isolated"
+          ],
+          "default": "shared"
+        }
+      }
+    },
+    "gateways": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "host"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32
+          },
+          "host": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 253
+          },
+          "timezone": {
+            "type": "integer",
+            "minimum": -12,
+            "maximum": 14,
+            "default": 0
+          },
+          "realm": {
+            "type": "string",
+            "maxLength": 32
+          }
+        }
+      }
+    },
+    "channels": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "manifest"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/id"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 24
+          },
+          "manifest": {
+            "$ref": "#/$defs/httpsUrl"
+          }
+        }
+      }
+    },
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "versions"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/id"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32
+          },
+          "kind": {
+            "type": "string",
+            "maxLength": 16
+          },
+          "default": {
+            "type": "string"
+          },
+          "flags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/flag"
+            },
+            "uniqueItems": true
+          },
+          "conflicts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/id"
+            },
+            "uniqueItems": true
+          },
+          "versions": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "manifest"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 24
+                },
+                "manifest": {
+                  "$ref": "#/$defs/httpsUrl"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "settings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/setting"
+      }
+    },
+    "launch": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "exe": {
+          "$ref": "#/$defs/relativePath",
+          "default": "Game.exe"
+        },
+        "defaultFlags": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/flag"
+          },
+          "uniqueItems": true
+        },
+        "allowedFlags": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/flag"
+          },
+          "uniqueItems": true
+        },
+        "maxInstances": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16,
+          "default": 1
+        }
+      }
+    },
+    "news": {
+      "$ref": "#/$defs/httpsUrl"
+    },
+    "ladder": {
+      "$ref": "#/$defs/httpsUrl"
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{1,31}$"
+    },
+    "httpsUrl": {
+      "type": "string",
+      "pattern": "^https://[^\\s]+$",
+      "maxLength": 2048
+    },
+    "flag": {
+      "type": "string",
+      "pattern": "^-[A-Za-z0-9][A-Za-z0-9_-]*$",
+      "maxLength": 32
+    },
+    "relativePath": {
+      "description": "Relative to the server folder, forward slashes only. The launcher also rejects Windows reserved names, trailing dots or spaces, and case-insensitive duplicates; see SPEC section 4.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240,
+      "pattern": "^[^\\\\:*?\"<>|]+$",
+      "not": {
+        "anyOf": [
+          {
+            "pattern": "^/"
+          },
+          {
+            "pattern": "(^|/)\\.\\.?(/|$)"
+          }
+        ]
+      }
+    },
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "url"
+      ],
+      "properties": {
+        "url": {
+          "$ref": "#/$defs/httpsUrl"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "setting": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "type",
+        "target"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "group": {
+          "type": "string",
+          "maxLength": 24
+        },
+        "component": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "enum": [
+            "bool",
+            "choice",
+            "int",
+            "string"
+          ]
+        },
+        "default": {
+          "type": [
+            "boolean",
+            "integer",
+            "string"
+          ]
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "value",
+              "label"
+            ],
+            "properties": {
+              "value": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string",
+                "maxLength": 32
+              }
+            }
+          }
+        },
+        "min": {
+          "type": "integer"
+        },
+        "max": {
+          "type": "integer"
+        },
+        "maxLength": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 256
+        },
+        "target": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "file",
+                "format",
+                "key"
+              ],
+              "properties": {
+                "file": {
+                  "$ref": "#/$defs/relativePath"
+                },
+                "format": {
+                  "enum": [
+                    "ini",
+                    "bh"
+                  ]
+                },
+                "section": {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                "key": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "flag"
+              ],
+              "properties": {
+                "flag": {
+                  "$ref": "#/$defs/flag"
+                }
+              }
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "choice"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "options"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "target": {
+                "required": [
+                  "flag"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "type": {
+                "const": "bool"
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

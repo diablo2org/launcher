@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Name=Launcher
+Comment=Launcher for Diablo II private servers
+# The Exec line includes %u to pass the URL to the application
+Exec=/usr/local/bin/launcher %u
+Terminal=false
+Type=Application
+Icon=launcher
+Categories=Utility;
+StartupWMClass=launcher
+
+ 

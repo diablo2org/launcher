@@ -1,0 +1,10 @@
+.task
+bin
+frontend/dist
+frontend/node_modules
+build/linux/appimage/build
+build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
+# Regenerated from the Go services on every build
+frontend/bindings
+# Local dev environment (testenv/dev.ps1)
+testenv/.dev

@@ -1,0 +1,83 @@
+@import "tailwindcss";
+@import "@fontsource/cinzel/600.css";
+@import "@fontsource/cinzel/700.css";
+@import "@fontsource/roboto/400.css";
+@import "@fontsource/roboto/700.css";
+
+/* The launcher's palette, carried over from the SlashDiablo launcher. A
+   server's branding only ever replaces --color-accent, so every screen stays
+   readable whatever a server picks. */
+@theme {
+  --color-ink: #0a0a0d;
+  --color-panel: #0c0c0c;
+  --color-raised: #121214;
+  --color-line: #161616;
+  --color-edge: #26242b;
+  --color-title: #c7cbd1;
+  --color-text: #e6e3df;
+  --color-muted: #676767;
+  --color-dim: #3b3b3b;
+  --color-date: #a19a97;
+  --color-body: #736c6a;
+  --color-accent: #5c0202;
+  --color-track: #1e1b26;
+  --color-ok: #64d168;
+  --color-bad: #fa5757;
+
+  --font-display: "Cinzel", "Georgia", serif;
+  --font-sans: "Roboto", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Cascadia Mono", Consolas, monospace;
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+  background: var(--color-ink);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  height: 100%;
+}
+
+/* Wails: the top bar drags the frameless window; controls inside it don't. */
+.drag {
+  --wails-draggable: drag;
+}
+.no-drag {
+  --wails-draggable: no-drag;
+}
+
+.title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--color-title);
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #2a272e;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+select,
+input,
+textarea {
+  user-select: text;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-title);
+  outline-offset: 2px;
+}
