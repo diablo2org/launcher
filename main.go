@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -93,6 +94,7 @@ func main() {
 		Updates: updatesClient(clientOpts),
 		// The installer runs on its own, shown to the player, and replaces
 		// this launcher once it has closed.
+		UpdatesDir:   filepath.Join(dataDir, "updates"),
 		RunInstaller: func(path string) error { return exec.Command(path).Start() },
 		// Quit from a frontend call returns first, so the call completes.
 		Quit:       func() { go func() { time.Sleep(300 * time.Millisecond); a.Quit() }() },

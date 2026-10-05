@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/diablo2org/launcher/internal/updates"
@@ -23,7 +22,7 @@ type LauncherUpdateProgress struct {
 // the release's SHA-256, starts it, and closes the launcher so its files can
 // be replaced. The player sees the installer and finishes it themselves.
 func (s *ServerService) InstallUpdate(ctx context.Context) error {
-	if s.host.Updates == nil || s.host.RunInstaller == nil || s.host.Quit == nil {
+	if s.host.Updates == nil || s.host.RunInstaller == nil || s.host.Quit == nil || s.host.UpdatesDir == "" {
 		return errors.New("updating isn't available")
 	}
 
@@ -36,10 +35,15 @@ func (s *ServerService) InstallUpdate(ctx context.Context) error {
 		return errors.New("there's no update to install; download it from the release page")
 	}
 
-	// A folder of its own, so two launchers updating at once can't remove
-	// each other's installer.
-	removeOldUpdates(os.TempDir())
-	dir, err := os.MkdirTemp("", updateDirPrefix)
+	// Each attempt gets a folder of its own inside the launcher's, so two
+	// launchers updating at once can't remove each other's installer, and
+	// clearing out old attempts can't touch anything the launcher didn't
+	// make.
+	if err := os.MkdirAll(s.host.UpdatesDir, 0o755); err != nil {
+		return err
+	}
+	removeOldUpdates(s.host.UpdatesDir)
+	dir, err := os.MkdirTemp(s.host.UpdatesDir, "attempt-")
 	if err != nil {
 		return err
 	}
@@ -63,26 +67,23 @@ func (s *ServerService) InstallUpdate(ctx context.Context) error {
 	return nil
 }
 
-// updateDirPrefix starts the name of each update attempt's folder in the
-// temporary folder.
-const updateDirPrefix = "diablo2org-launcher-update-"
-
-// removeOldUpdates removes update folders left from earlier attempts. A
-// started installer runs from its folder, so only folders a day old go.
-func removeOldUpdates(tmp string) {
-	entries, err := os.ReadDir(tmp)
+// removeOldUpdates removes earlier attempts' folders from the launcher's
+// updates folder. A started installer runs from its folder, so only folders
+// a day old go.
+func removeOldUpdates(dir string) {
+	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return
 	}
 
 	for _, e := range entries {
-		if !e.IsDir() || !strings.HasPrefix(e.Name(), updateDirPrefix) {
+		if !e.IsDir() {
 			continue
 		}
 		info, err := e.Info()
 		if err != nil || time.Since(info.ModTime()) < 24*time.Hour {
 			continue
 		}
-		os.RemoveAll(filepath.Join(tmp, e.Name()))
+		os.RemoveAll(filepath.Join(dir, e.Name()))
 	}
 }

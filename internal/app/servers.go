@@ -23,6 +23,8 @@ type Host struct {
 	Updates *fetch.Client
 	// OpenFolder shows a folder in the file manager.
 	OpenFolder func(path string) error
+	// UpdatesDir is the launcher's own folder for downloaded installers.
+	UpdatesDir string
 	// RunInstaller starts a downloaded launcher installer.
 	RunInstaller func(path string) error
 	// Quit closes the launcher.
