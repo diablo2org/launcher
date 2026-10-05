@@ -68,3 +68,24 @@ func TestSaveReport(t *testing.T) {
 		t.Errorf("cancelled: %q, %v", path, err)
 	}
 }
+
+func TestWriteFileAtomic(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "report.zip")
+	os.WriteFile(path, []byte("old"), 0o644)
+
+	if err := writeFileAtomic(path, []byte("new")); err != nil {
+		t.Fatal(err)
+	}
+	if data, _ := os.ReadFile(path); string(data) != "new" {
+		t.Errorf("file = %q", data)
+	}
+
+	// Into a folder that doesn't exist: an error, and nothing left behind.
+	if err := writeFileAtomic(filepath.Join(dir, "missing", "r.zip"), []byte("x")); err == nil {
+		t.Error("write into a missing folder succeeded")
+	}
+	if entries, _ := os.ReadDir(dir); len(entries) != 1 {
+		t.Errorf("left behind: %v", entries)
+	}
+}

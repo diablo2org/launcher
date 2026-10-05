@@ -10,6 +10,7 @@ import (
 	"github.com/diablo2org/launcher/internal/core"
 	"github.com/diablo2org/launcher/internal/fetch"
 	"github.com/diablo2org/launcher/internal/install"
+	"github.com/diablo2org/launcher/internal/logs"
 	"github.com/diablo2org/launcher/internal/sync"
 	"github.com/diablo2org/launcher/internal/updates"
 )
@@ -88,9 +89,10 @@ func (s *ServerService) Overview(ctx context.Context) Overview {
 func (s *ServerService) AddServer(ctx context.Context, profileURL string) (string, error) {
 	p, err := s.m.AddServer(ctx, profileURL)
 	if err != nil {
-		return "", logged("add server", profileURL, err)
+		slog.Error("add server", "url", logs.RedactURLs(profileURL), "err", logs.RedactURLs(err.Error()))
+		return "", err
 	}
-	slog.Info("server added", "server", p.ID, "url", profileURL)
+	slog.Info("server added", "server", p.ID, "url", logs.RedactURLs(profileURL))
 
 	return p.ID, nil
 }
@@ -263,10 +265,11 @@ func (s *ServerService) CheckForUpdate(ctx context.Context) *updates.Release {
 }
 
 // logged records a failed action in the log, so it's there for a bug report,
-// and returns the error unchanged.
+// and returns the error unchanged. URLs in the error lose their queries,
+// which can hold tokens.
 func logged(action, server string, err error) error {
 	if err != nil {
-		slog.Error(action, "server", server, "err", err)
+		slog.Error(action, "server", server, "err", logs.RedactURLs(err.Error()))
 	}
 
 	return err

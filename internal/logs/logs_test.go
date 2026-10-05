@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -81,5 +82,62 @@ func TestAtLeast(t *testing.T) {
 
 	if out := buf.String(); strings.Contains(out, "asset served") || !strings.Contains(out, "something odd") || !strings.Contains(out, "from=wails") {
 		t.Errorf("log = %q", out)
+	}
+}
+
+func TestRedactURLs(t *testing.T) {
+	in := `get "https://a.net/p.json?token=secret#x": 404; see https://b.net/ok and http://c.net/q?k=v`
+	want := `get "https://a.net/p.json": 404; see https://b.net/ok and http://c.net/q`
+	if got := RedactURLs(in); got != want {
+		t.Errorf("RedactURLs = %q", got)
+	}
+}
+
+// A rotation that fails, here because an old file is held open, is retried
+// only after another maxSize, not on every entry.
+func TestWriterBacksOffAfterFailedRotation(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("holding a file open only blocks renaming it on Windows")
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "launcher.log")
+	w, err := Open(path, 100, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+
+	line := strings.Repeat("x", 39) + "\n"
+	w.Write([]byte(line))
+	w.Write([]byte(line))
+	w.Write([]byte(line)) // rotates: launcher.1.log now exists
+
+	held, err := os.Open(filepath.Join(dir, "launcher.1.log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Retrying only after another maxSize (counting the failure notes, which
+	// are long here next to a 100-byte limit) means at most every other
+	// entry, where before it was every one.
+	const entries = 20
+	for i := 0; i < entries; i++ {
+		w.Write([]byte(line))
+	}
+
+	data, _ := os.ReadFile(path)
+	n := strings.Count(string(data), "log rotation failed")
+	if n == 0 || n > entries/2 {
+		t.Errorf("rotation failed %d times in %d entries; want a wait of maxSize between tries", n, entries)
+	}
+
+	// Once the file is free, rotation works again.
+	held.Close()
+	for i := 0; i < 6; i++ {
+		w.Write([]byte(line))
+	}
+	if info, err := os.Stat(path); err != nil || info.Size() > 100 {
+		t.Errorf("log didn't rotate once the old file was free: %v, %v", info.Size(), err)
 	}
 }

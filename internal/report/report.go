@@ -6,11 +6,11 @@ package report
 
 import (
 	"archive/zip"
-	"bytes"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -23,6 +23,9 @@ import (
 // maxFile is the most taken from any one file. Logs are capped well below
 // this; it keeps a stray large game file from bloating the report.
 const maxFile = 2 << 20
+
+// serverID is the profile spec's id pattern.
+var serverID = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,31}$`)
 
 // gameCrashes is how many of the game's crash logs are taken per server, the
 // newest first.
@@ -84,6 +87,11 @@ func Collect(in Input) []Item {
 		ids := append([]string{}, in.Servers...)
 		sort.Strings(ids)
 		for _, id := range ids {
+			// Ids come from state.json; one that isn't a plain server id
+			// could point outside the Diablo II folder.
+			if !serverID.MatchString(id) {
+				continue
+			}
 			for _, f := range gameCrashLogs(install.ServerDir(in.Base, id)) {
 				add("game/"+id+"/"+filepath.Base(f), "Diablo II crash log", f)
 			}
@@ -220,23 +228,10 @@ func redact(data []byte, home string) []byte {
 	return data
 }
 
-// replaceFold replaces old case-insensitively, as Windows paths are.
+// replaceFold replaces old case-insensitively, as Windows paths are. The
+// regexp folds case on the text as it is, so characters whose lower case is
+// a different length, such as İ, don't throw the match off.
 func replaceFold(data []byte, old, new string) []byte {
-	lower := bytes.ToLower(data)
-	target := bytes.ToLower([]byte(old))
-	if !bytes.Contains(lower, target) || len(lower) != len(data) {
-		return data
-	}
-
-	var out bytes.Buffer
-	for {
-		i := bytes.Index(lower, target)
-		if i < 0 {
-			out.Write(data)
-			return out.Bytes()
-		}
-		out.Write(data[:i])
-		out.WriteString(new)
-		data, lower = data[i+len(target):], lower[i+len(target):]
-	}
+	re := regexp.MustCompile("(?i)" + regexp.QuoteMeta(old))
+	return re.ReplaceAllLiteral(data, []byte(new))
 }

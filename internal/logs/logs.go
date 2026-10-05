@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"runtime/debug"
 	"sync"
@@ -78,6 +79,10 @@ type Writer struct {
 	mu   sync.Mutex
 	f    *os.File
 	size int64
+	// limit is the size that starts a new file: maxSize, or after a failed
+	// rotation, another maxSize on from where it failed, so a file held open
+	// elsewhere isn't retried on every entry.
+	limit int64
 }
 
 var _ io.WriteCloser = (*Writer)(nil)
@@ -85,7 +90,7 @@ var _ io.WriteCloser = (*Writer)(nil)
 // Open appends to the log file at path. When it passes maxSize it becomes
 // the first of keep old files and a new one is started.
 func Open(path string, maxSize int64, keep int) (*Writer, error) {
-	w := &Writer{path: path, maxSize: maxSize, keep: keep}
+	w := &Writer{path: path, maxSize: maxSize, keep: keep, limit: maxSize}
 	if err := w.open(); err != nil {
 		return nil, err
 	}
@@ -118,14 +123,18 @@ func (w *Writer) Write(p []byte) (int, error) {
 		return 0, os.ErrClosed
 	}
 
-	if w.size > 0 && w.size+int64(len(p)) > w.maxSize {
+	if w.size > 0 && w.size+int64(len(p)) > w.limit {
 		if err := w.rotate(); err != nil {
 			if w.f == nil {
 				return 0, err
 			}
 			// The old files couldn't be shifted, so this one grows past the
-			// limit; better than losing the entry.
-			fmt.Fprintf(w.f, "log rotation failed: %v\n", err)
+			// limit, which is better than losing the entry. Try again later.
+			n, _ := fmt.Fprintf(w.f, "log rotation failed: %v\n", err)
+			w.size += int64(n)
+			w.limit = w.size + w.maxSize
+		} else {
+			w.limit = w.maxSize
 		}
 	}
 
@@ -209,4 +218,13 @@ func (h atLeast) WithAttrs(attrs []slog.Attr) slog.Handler {
 
 func (h atLeast) WithGroup(name string) slog.Handler {
 	return atLeast{h.Handler.WithGroup(name), h.min}
+}
+
+// urlQuery matches a URL's query and fragment.
+var urlQuery = regexp.MustCompile(`(https?://[^\s?#"']*)[?#][^\s"']*`)
+
+// RedactURLs drops the query and fragment from every URL in s. They can
+// carry tokens, and logs end up in bug reports.
+func RedactURLs(s string) string {
+	return urlQuery.ReplaceAllString(s, "$1")
 }

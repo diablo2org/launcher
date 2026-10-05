@@ -5,6 +5,7 @@ import (
 	"log"
 	"log/slog"
 	"os"
+	"strconv"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 
@@ -153,8 +154,12 @@ func main() {
 
 func windowsOptions() application.WindowsOptions {
 	var o application.WindowsOptions
-	if port := os.Getenv(envDevTools); port != "" {
-		o.AdditionalBrowserArgs = []string{"--remote-debugging-port=" + port}
+	if v := os.Getenv(envDevTools); v != "" {
+		if port, err := strconv.Atoi(v); err == nil && port >= 1 && port <= 65535 {
+			o.AdditionalBrowserArgs = []string{"--remote-debugging-port=" + strconv.Itoa(port)}
+		} else {
+			slog.Warn("ignoring "+envDevTools+": not a port number", "value", v)
+		}
 	}
 
 	return o

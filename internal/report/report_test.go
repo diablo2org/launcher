@@ -113,3 +113,36 @@ func TestIsGameCrashLog(t *testing.T) {
 		}
 	}
 }
+
+func TestRedactUnicode(t *testing.T) {
+	// İ lower-cases to a shorter sequence, which once made the whole file
+	// skip redaction.
+	data := []byte(`İstanbul save at C:\USERS\player\Saved Games and c:/users/Player/x`)
+	got := string(redact(data, `C:\Users\Player`))
+	if strings.Contains(strings.ToLower(got), "player") || !strings.HasPrefix(got, "İstanbul") {
+		t.Errorf("redact = %q", got)
+	}
+
+	// Non-ASCII user names match regardless of case too.
+	got = string(redact([]byte(`C:\Users\ÉLODIE\x`), `C:\Users\élodie`))
+	if got != `%USERPROFILE%\x` {
+		t.Errorf("redact = %q", got)
+	}
+}
+
+func TestCollectSkipsUnsafeServerIDs(t *testing.T) {
+	root := t.TempDir()
+	base := filepath.Join(root, "Diablo II")
+	write(t, filepath.Join(root, "outside", "D2260101.txt"), "not ours")
+	write(t, filepath.Join(install.ServerDir(base, "ok"), "D2260101.txt"), "ours")
+
+	items := Collect(Input{DataDir: filepath.Join(root, "data"), Base: base, Servers: []string{"../outside", `..\outside`, "ok"}})
+	for _, it := range items {
+		if strings.Contains(it.Name, "..") || strings.Contains(it.Name, "outside") {
+			t.Errorf("collected %s", it.Name)
+		}
+	}
+	if items[len(items)-1].Name != "game/ok/D2260101.txt" {
+		t.Errorf("items = %+v", items)
+	}
+}

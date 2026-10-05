@@ -56,7 +56,7 @@ func (s *SupportService) SaveReport() (string, error) {
 	if err := report.Write(&buf, report.Collect(in), in.Home); err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(path, buf.Bytes(), 0o644); err != nil {
+	if err := writeFileAtomic(path, buf.Bytes()); err != nil {
 		return "", err
 	}
 	slog.Info("bug report saved", "bytes", buf.Len())
@@ -86,7 +86,10 @@ func (s *SupportService) LogFrontendError(message string) {
 }
 
 func (s *SupportService) input() report.Input {
-	home, _ := os.UserHomeDir()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		home = ""
+	}
 
 	in := report.Input{DataDir: s.st.Dir(), Base: s.m.Base(), Home: home}
 	if state, err := s.st.Load(); err == nil {
@@ -101,6 +104,9 @@ func (s *SupportService) input() report.Input {
 	fmt.Fprintf(&about, "System   %s %s, %s\n", runtime.GOOS, osVersion(), runtime.GOARCH)
 	fmt.Fprintf(&about, "Built    %s\n", runtime.Version())
 	fmt.Fprintf(&about, "Report   %s\n", time.Now().Format(time.RFC3339))
+	if home == "" {
+		fmt.Fprintf(&about, "\nNote: the Windows user folder couldn't be found, so paths in this report may show the user name.\n")
+	}
 	fmt.Fprintf(&about, "\nDiablo II folder: %s\n", in.Base)
 	if in.Base != "" {
 		r, warning, err := s.m.CheckBase()
@@ -128,4 +134,30 @@ func (s *SupportService) input() report.Input {
 	in.About = about.String()
 
 	return in
+}
+
+// writeFileAtomic writes data beside path and then renames it into place, so
+// a failed write never leaves a half-written report where the player looks.
+func writeFileAtomic(path string, data []byte) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".launcher-report-*.tmp")
+	if err != nil {
+		return err
+	}
+
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		os.Remove(tmp.Name())
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmp.Name())
+		return err
+	}
+
+	if err := os.Rename(tmp.Name(), path); err != nil {
+		os.Remove(tmp.Name())
+		return err
+	}
+
+	return nil
 }
