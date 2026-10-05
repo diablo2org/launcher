@@ -26,6 +26,9 @@ type State struct {
 	// LegacyImported records that the old SlashDiablo launcher's settings
 	// have been brought across, so it only happens once.
 	LegacyImported bool `json:"legacyImported"`
+	// Welcomed records that the player has been through the first-run
+	// screen.
+	Welcomed bool `json:"welcomed"`
 }
 
 // Server is what the launcher remembers about one server.

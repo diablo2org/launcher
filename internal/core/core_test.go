@@ -450,3 +450,34 @@ func TestMissingBaseArchive(t *testing.T) {
 		t.Error("reported as needing a copy")
 	}
 }
+
+func TestFirstRun(t *testing.T) {
+	h := newHarness(t)
+
+	if !h.m.FirstRun() {
+		t.Fatal("a new launcher isn't on its first run")
+	}
+
+	// Anyone with a pinned server has used the launcher before.
+	h.m.SetFavourite("a", true)
+	if h.m.FirstRun() {
+		t.Error("first run with a server pinned")
+	}
+	h.m.SetFavourite("a", false)
+
+	if err := h.m.FinishWelcome(); err != nil {
+		t.Fatal(err)
+	}
+	if h.m.FirstRun() {
+		t.Error("first run after the welcome")
+	}
+
+	// It's remembered.
+	m, err := New(h.store, DirListing(h.listing), launch.New(nil, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.FirstRun() {
+		t.Error("welcome not remembered")
+	}
+}

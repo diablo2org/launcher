@@ -200,6 +200,26 @@ func (m *Manager) SetLaunchDelay(ms int) error {
 	return m.save()
 }
 
+// FirstRun reports whether to show the welcome screen: the player hasn't
+// been through it, and has no servers pinned, as anyone who has used the
+// launcher, or the old SlashDiablo one, will have.
+func (m *Manager) FirstRun() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return !m.state.Welcomed && len(m.state.Favourites) == 0
+}
+
+// FinishWelcome records that the player has been through the welcome screen,
+// so it isn't shown again.
+func (m *Manager) FinishWelcome() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.state.Welcomed = true
+	return m.save()
+}
+
 // ServerInfo is a server as the catalog shows it.
 type ServerInfo struct {
 	ID        string        `json:"id"`
