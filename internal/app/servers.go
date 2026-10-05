@@ -106,9 +106,10 @@ func (s *ServerService) ChooseBase(ctx context.Context) (Overview, error) {
 	return s.Overview(ctx), nil
 }
 
-// FinishWelcome stops the welcome screen showing again.
-func (s *ServerService) FinishWelcome() error {
-	return s.m.FinishWelcome()
+// FinishWelcome pins the servers picked on the welcome screen and stops it
+// showing again.
+func (s *ServerService) FinishWelcome(pins []string) error {
+	return s.m.FinishWelcome(pins)
 }
 
 // SetFavourite pins or unpins a server.

@@ -238,8 +238,7 @@ class AppState {
   // catalog when none were picked.
   async finishWelcome(pins: string[]) {
     try {
-      for (const id of pins) await ServerService.SetFavourite(id, true);
-      await ServerService.FinishWelcome();
+      await ServerService.FinishWelcome(pins);
       this.overview = await ServerService.Overview();
       this.error = "";
     } catch (err) {
@@ -248,7 +247,8 @@ class AppState {
     }
 
     for (const id of this.favourites) this.warm(id);
-    if (pins.length) this.select(pins[0]);
+    // The reloaded list may not have it, if the listing failed to load.
+    if (pins.length && this.info(pins[0])?.profile) this.select(pins[0]);
     else this.page = "catalog";
   }
 
