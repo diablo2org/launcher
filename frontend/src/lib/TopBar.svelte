@@ -11,6 +11,12 @@
   });
 
   const onServer = $derived(app.page === "launch" || app.page === "ladder");
+
+  // Kept in step however the window changes: this button, double-clicking
+  // the bar, snapping, or Windows+Up.
+  let maximised = $state(false);
+  const checkMaximised = () => Window.IsMaximised().then((m) => (maximised = m));
+  checkMaximised();
 </script>
 
 {#snippet item(label: string, active: boolean, onclick: () => void, external = false)}
@@ -28,6 +34,8 @@
     {/if}
   </button>
 {/snippet}
+
+<svelte:window onresize={checkMaximised} />
 
 <header class="drag flex h-20 shrink-0 items-center gap-10 border-b border-line pr-3 pl-8">
   {#if onServer}
@@ -58,6 +66,13 @@
   <div class="no-drag ml-2 flex self-start pt-1">
     <button class="rounded p-2 text-muted hover:text-title" aria-label="Minimise" onclick={() => Window.Minimise()}>
       <Icon name="min" size={16} />
+    </button>
+    <button
+      class="rounded p-2 text-muted hover:text-title"
+      aria-label={maximised ? "Restore" : "Maximise"}
+      onclick={() => Window.ToggleMaximise()}
+    >
+      <Icon name={maximised ? "restore" : "max"} size={16} />
     </button>
     <button class="rounded p-2 text-muted hover:text-bad" aria-label="Close" onclick={() => Window.Close()}>
       <Icon name="close" size={16} />
