@@ -101,6 +101,12 @@ func TestBuildManifestRejectsClashes(t *testing.T) {
 	if _, err := BuildManifest(t.TempDir(), Options{BaseURL: "ftp://a.net"}); err == nil {
 		t.Error("non-https base URL accepted")
 	}
+
+	for _, base := range []string{"https://a.net/live?token=x", "https://a.net/live#x", "https://a.net/live?"} {
+		if _, err := BuildManifest(t.TempDir(), Options{BaseURL: base}); err == nil {
+			t.Errorf("base URL %s accepted", base)
+		}
+	}
 }
 
 func TestInitProfile(t *testing.T) {

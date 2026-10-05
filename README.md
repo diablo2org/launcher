@@ -48,6 +48,10 @@ files the player owns after the first install, such as maphack settings, and
 `-only` builds a component's manifest from a full install. When you patch,
 rebuild and re-upload the manifest; no pull request is needed.
 
+With components, `d2pack build <plan.json>` builds every channel and
+component version's manifest in one go, ready to upload. See
+[`examples/slashdiablo/build.json`](examples/slashdiablo/build.json).
+
 ## Development
 
 You need Go 1.25 or newer, Node 24, and the Wails CLI at the version CI uses:

@@ -1,0 +1,9 @@
+{
+  "profile": "profile.json",
+  "manifests": [
+    { "channel": "live", "source": ["slashdiablo-patches/1.13c", "slashdiablo-patches/current"] },
+    { "component": "maphack", "version": "1.9.9", "source": "slashdiablo-patches/maphack_1.9.9", "once": ["BH_settings.cfg"] },
+    { "component": "hd", "version": "3.0", "source": "slashdiablo-patches/hd_3.0" },
+    { "component": "d2gl", "version": "1.3.3", "source": "slashdiablo-patches/d2gl_1.3.3" }
+  ]
+}
