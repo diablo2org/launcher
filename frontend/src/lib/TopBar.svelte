@@ -14,9 +14,22 @@
 
   // Kept in step however the window changes: this button, double-clicking
   // the bar, snapping, or Windows+Up.
+  // Replies can arrive out of order, so only the newest request's counts.
   let maximised = $state(false);
-  const checkMaximised = () => Window.IsMaximised().then((m) => (maximised = m));
+  let latest = 0;
+  async function checkMaximised() {
+    const asked = ++latest;
+    const m = await Window.IsMaximised();
+    if (asked === latest) maximised = m;
+  }
   checkMaximised();
+
+  // Wails doesn't always report a maximise as a page resize, so check after
+  // toggling too.
+  async function toggleMaximised() {
+    await Window.ToggleMaximise();
+    await checkMaximised();
+  }
 </script>
 
 {#snippet item(label: string, active: boolean, onclick: () => void, external = false)}
@@ -70,7 +83,7 @@
     <button
       class="rounded p-2 text-muted hover:text-title"
       aria-label={maximised ? "Restore" : "Maximise"}
-      onclick={() => Window.ToggleMaximise()}
+      onclick={toggleMaximised}
     >
       <Icon name={maximised ? "restore" : "max"} size={16} />
     </button>
