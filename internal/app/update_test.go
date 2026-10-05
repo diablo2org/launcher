@@ -5,24 +5,48 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 )
 
-func TestRemoveOldUpdates(t *testing.T) {
-	dir := t.TempDir()
-	old := filepath.Join(dir, "attempt-1")
-	recent := filepath.Join(dir, "attempt-2")
-	for _, d := range []string{old, recent} {
-		os.MkdirAll(d, 0o755)
-		os.WriteFile(filepath.Join(d, "launcher-amd64-installer.exe"), []byte("x"), 0o644)
+// old makes a folder with a file in it, a day old.
+func old(t *testing.T, dir string) {
+	t.Helper()
+
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "launcher-amd64-installer.exe"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
 	}
 	yesterday := time.Now().Add(-25 * time.Hour)
-	os.Chtimes(old, yesterday, yesterday)
+	if err := os.Chtimes(dir, yesterday, yesterday); err != nil {
+		t.Fatal(err)
+	}
+}
 
-	removeOldUpdates(dir)
+func TestRemoveOldUpdates(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "updates")
+	root, err := openUpdatesDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer root.Close()
 
-	if _, err := os.Stat(old); err == nil {
+	stale := filepath.Join(dir, "attempt-1")
+	old(t, stale)
+	recent, err := newAttempt(root, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(filepath.Base(recent), "attempt-") || filepath.Dir(recent) != dir {
+		t.Errorf("new attempt at %s", recent)
+	}
+
+	removeOldUpdates(root)
+
+	if _, err := os.Stat(stale); err == nil {
 		t.Error("day-old attempt kept")
 	}
 	if _, err := os.Stat(recent); err != nil {
@@ -34,14 +58,12 @@ func TestRemoveOldUpdates(t *testing.T) {
 }
 
 func TestUpdatesDirMustNotBeALink(t *testing.T) {
-	root := t.TempDir()
-	elsewhere := filepath.Join(root, "elsewhere")
+	tmp := t.TempDir()
+	elsewhere := filepath.Join(tmp, "elsewhere")
 	victim := filepath.Join(elsewhere, "old-folder")
-	os.MkdirAll(victim, 0o755)
-	yesterday := time.Now().Add(-25 * time.Hour)
-	os.Chtimes(victim, yesterday, yesterday)
+	old(t, victim)
 
-	link := filepath.Join(root, "updates")
+	link := filepath.Join(tmp, "updates")
 	if err := os.Symlink(elsewhere, link); err != nil {
 		if runtime.GOOS != "windows" {
 			t.Skipf("can't make a symlink here: %v", err)
@@ -51,16 +73,11 @@ func TestUpdatesDirMustNotBeALink(t *testing.T) {
 		}
 	}
 
-	if err := plainDir(link); err == nil {
-		t.Error("linked updates folder accepted")
+	if root, err := openUpdatesDir(link); err == nil {
+		root.Close()
+		t.Fatal("linked updates folder accepted")
 	}
-
-	removeOldUpdates(link)
 	if _, err := os.Stat(victim); err != nil {
-		t.Error("cleanup followed the link and removed a folder elsewhere")
-	}
-
-	if err := plainDir(elsewhere); err != nil {
-		t.Errorf("plain folder refused: %v", err)
+		t.Error("a folder the link points to was removed")
 	}
 }
