@@ -60,10 +60,16 @@ jobs:
 
       # A per-user installer, so installing needs no administrator rights.
       # Tagged builds carry the tag as their version; others report "dev".
+      # The tag reaches the script as an environment variable, never as
+      # script text, so a tag name can't add commands; the Taskfile then
+      # only uses it if it is a SemVer tag.
       - name: Build installer
         shell: pwsh
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
-          $version = if ("${{ github.ref_type }}" -eq "tag") { "${{ github.ref_name }}" } else { "" }
+          $version = if ($env:REF_TYPE -eq "tag") { $env:REF_NAME } else { "" }
           if ($version) { wails3 package INSTALL_SCOPE=user VERSION=$version } else { wails3 package INSTALL_SCOPE=user }
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 

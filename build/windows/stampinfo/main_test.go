@@ -9,10 +9,12 @@ import (
 
 func TestParse(t *testing.T) {
 	for tag, want := range map[string][2]string{
-		"v1.2.3":        {"1.2.3", "1.2.3"},
-		"0.4.0":         {"0.4.0", "0.4.0"},
-		"v1.2.3-beta.1": {"1.2.3", "1.2.3-beta.1"},
-		"v10.0.12+ci.7": {"10.0.12", "10.0.12+ci.7"},
+		"v1.2.3":           {"1.2.3", "1.2.3"},
+		"0.4.0":            {"0.4.0", "0.4.0"},
+		"v1.2.3-beta.1":    {"1.2.3", "1.2.3-beta.1"},
+		"v10.0.12+ci.7":    {"10.0.12", "10.0.12+ci.7"},
+		"v1.0.0-0.3.7":     {"1.0.0", "1.0.0-0.3.7"},
+		"v1.0.0-x-y.1+b.2": {"1.0.0", "1.0.0-x-y.1+b.2"},
 	} {
 		numeric, full, err := parse(tag)
 		if err != nil || numeric != want[0] || full != want[1] {
@@ -20,7 +22,15 @@ func TestParse(t *testing.T) {
 		}
 	}
 
-	for _, bad := range []string{"", "dev", "v1.2", "v1.2.3.4", "1.2.3 ", "v1.2.x"} {
+	for _, bad := range []string{
+		"", "dev", "v1.2", "v1.2.3.4", "1.2.3 ", "v1.2.x",
+		// Leading zeros, in the version or a numeric pre-release identifier.
+		"v01.2.3", "v1.2.3-beta.01",
+		// Empty suffixes and identifiers.
+		"v1.2.3-", "v1.2.3+", "v1.2.3-beta..1",
+		// Anything a shell would act on.
+		"v1.2.3;whoami;#", "v1.2.3-$(id)", "v1.2.3-a`b`", `v1.2.3-"x"`,
+	} {
 		if _, _, err := parse(bad); err == nil {
 			t.Errorf("parse(%q) accepted", bad)
 		}

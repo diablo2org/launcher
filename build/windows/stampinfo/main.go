@@ -15,8 +15,10 @@ import (
 	"strings"
 )
 
-// A tag such as v1.2.3, optionally with a pre-release or build suffix.
-var tagPattern = regexp.MustCompile(`^v?(\d+)\.(\d+)\.(\d+)([-+][0-9A-Za-z.+-]+)?$`)
+// A SemVer tag such as v1.2.3, optionally with a pre-release and build
+// suffix. Numbers have no leading zeros, nor do numeric pre-release
+// identifiers. build/windows/Taskfile.yml uses the same pattern.
+var tagPattern = regexp.MustCompile(`^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$`)
 
 func main() {
 	in := flag.String("in", "", "info.json to read")
