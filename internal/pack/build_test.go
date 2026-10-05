@@ -2,7 +2,9 @@ package pack
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -87,6 +89,15 @@ func fileList(m *spec.Manifest) string {
 	return strings.Join(p, ",")
 }
 
+// noPartial fails if a build left its temporary folder behind.
+func noPartial(t *testing.T, out string) {
+	t.Helper()
+
+	if left, _ := filepath.Glob(out + ".partial-*"); len(left) > 0 {
+		t.Errorf("partial folder left behind: %v", left)
+	}
+}
+
 func TestBuild(t *testing.T) {
 	plan, root := buildSetup(t)
 	out := filepath.Join(root, "upload")
@@ -138,9 +149,7 @@ func TestBuild(t *testing.T) {
 		t.Errorf("not built = %s", got)
 	}
 
-	if _, err := os.Stat(out + ".partial"); err == nil {
-		t.Error("partial folder left behind")
-	}
+	noPartial(t, out)
 }
 
 func TestBuildFilesURL(t *testing.T) {
@@ -231,6 +240,14 @@ func TestBuildRejects(t *testing.T) {
 			p.Manifests[1].Files = "https://files.myserver.net/live"
 			return ""
 		}, "different file"},
+		{"query in files URL", func(p *Plan, _ string) string {
+			p.Manifests[1].Files = "https://files.myserver.net/maphack?token=x"
+			return ""
+		}, "query"},
+		{"fragment in files URL", func(p *Plan, _ string) string {
+			p.Manifests[1].Files = "https://files.myserver.net/maphack#x"
+			return ""
+		}, "fragment"},
 		{"files off the profile's hosts", func(p *Plan, _ string) string {
 			p.Manifests[1].Files = "https://elsewhere.net/maphack"
 			return ""
@@ -251,14 +268,56 @@ func TestBuildRejects(t *testing.T) {
 			}
 
 			// A failed build leaves nothing that looks ready to upload.
-			if _, err := os.Stat(out + ".partial"); err == nil {
-				t.Error("partial folder left behind")
-			}
+			noPartial(t, out)
 			if entries, _ := os.ReadDir(out); len(entries) > 0 {
 				t.Errorf("output written: %v", entries)
 			}
 		})
 	}
+}
+
+func TestBuildLeavesOtherFoldersAlone(t *testing.T) {
+	plan, root := buildSetup(t)
+	out := filepath.Join(root, "upload")
+
+	// Folders that look like an earlier build's leftovers aren't this build's
+	// to remove.
+	write(t, root, "upload.partial/keep", "someone's")
+	write(t, root, "upload.partial-123/keep", "someone's")
+
+	if _, err := Build(plan, BuildOptions{Version: "1", Out: out}); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, dir := range []string{"upload.partial", "upload.partial-123"} {
+		if _, err := os.Stat(filepath.Join(root, dir, "keep")); err != nil {
+			t.Errorf("%s was touched: %v", dir, err)
+		}
+	}
+}
+
+func TestBuildRejectsOutputLinkedIntoSource(t *testing.T) {
+	plan, root := buildSetup(t)
+
+	// root/link points at the game folder, so root/link/upload is inside it
+	// although its path doesn't say so.
+	link := filepath.Join(root, "link")
+	if err := os.Symlink(plan.Source[0], link); err != nil {
+		// Windows needs a privilege for symlinks but not for junctions.
+		if runtime.GOOS != "windows" {
+			t.Skipf("can't make a symlink here: %v", err)
+		}
+		if out, err := exec.Command("cmd", "/c", "mklink", "/J", link, plan.Source[0]).CombinedOutput(); err != nil {
+			t.Skipf("can't make a symlink or junction here: %v %s", err, out)
+		}
+	}
+	out := filepath.Join(link, "upload")
+
+	_, err := Build(plan, BuildOptions{Version: "1", Out: out})
+	if err == nil || !strings.Contains(err.Error(), "inside the source") {
+		t.Fatalf("err = %v, want one about the source", err)
+	}
+	noPartial(t, out)
 }
 
 func TestLoadPlan(t *testing.T) {
@@ -286,6 +345,11 @@ func TestLoadPlan(t *testing.T) {
 	write(t, dir, "typo.json", `{ "profile": "p.json", "manifests": [ { "chanel": "live" } ] }`)
 	if _, err := LoadPlan(filepath.Join(dir, "typo.json")); err == nil {
 		t.Error("unknown field accepted")
+	}
+
+	write(t, dir, "trailing.json", `{ "profile": "p.json", "manifests": [ { "channel": "live" } ] } { "oops": 1 }`)
+	if _, err := LoadPlan(filepath.Join(dir, "trailing.json")); err == nil {
+		t.Error("text after the plan accepted")
 	}
 
 	write(t, dir, "empty.json", `{ "profile": "p.json", "manifests": [] }`)

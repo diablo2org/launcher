@@ -90,6 +90,9 @@ func LoadPlan(file string) (*Plan, error) {
 	if err := dec.Decode(&p); err != nil {
 		return nil, fmt.Errorf("%s: %w", file, err)
 	}
+	if err := dec.Decode(&struct{}{}); err != io.EOF {
+		return nil, fmt.Errorf("%s: unexpected text after the plan", file)
+	}
 
 	if p.Profile == "" {
 		return nil, fmt.Errorf("%s: no profile", file)
@@ -173,13 +176,15 @@ func Build(plan *Plan, opts BuildOptions) (*BuildResult, error) {
 		return nil, err
 	}
 
-	// Build next to the output and rename at the end, so a failed build
-	// never leaves something that looks ready to upload.
-	tmp := out + ".partial"
-	if err := os.RemoveAll(tmp); err != nil {
+	// Build in a new folder next to the output and rename at the end, so a
+	// failed build never leaves something that looks ready to upload. Its
+	// name is unique, so only this build's own folder is ever removed.
+	parent := filepath.Dir(out)
+	if err := os.MkdirAll(parent, 0o755); err != nil {
 		return nil, err
 	}
-	if err := os.MkdirAll(tmp, 0o755); err != nil {
+	tmp, err := os.MkdirTemp(parent, filepath.Base(out)+".partial-")
+	if err != nil {
 		return nil, err
 	}
 
@@ -296,7 +301,7 @@ func (b *builder) build(e PlanEntry, manifestURL string) (*Built, error) {
 		if info, err := os.Stat(source); err != nil || !info.IsDir() {
 			return nil, fmt.Errorf("source %s is not a folder", source)
 		}
-		if inside(source, b.out) {
+		if inside(source, b.tmp) {
 			return nil, fmt.Errorf("the output folder can't be inside the source folder %s", source)
 		}
 	}
@@ -440,6 +445,11 @@ func urlPath(raw string) (string, error) {
 	if err != nil || u.Scheme != "https" || u.Hostname() == "" {
 		return "", fmt.Errorf("%q is not an https URL", raw)
 	}
+	// A query or fragment can't be mirrored by a folder, and file names
+	// appended to it would end up in the query, not the path.
+	if u.RawQuery != "" || u.ForceQuery || u.Fragment != "" {
+		return "", fmt.Errorf("%q can't have a query or fragment", raw)
+	}
 
 	rel := strings.ToLower(u.Hostname())
 	if p := strings.Trim(path.Clean("/"+u.Path), "/"); p != "" {
@@ -452,19 +462,30 @@ func urlPath(raw string) (string, error) {
 	return rel, nil
 }
 
-// inside reports whether p is dir or somewhere under it.
+// inside reports whether p is dir or somewhere under it. It compares
+// folders by identity, not by name, so a symlink or junction can't hide it.
 func inside(dir, p string) bool {
-	dir, err := filepath.Abs(dir)
+	want, err := os.Stat(dir)
 	if err != nil {
 		return false
 	}
 
-	rel, err := filepath.Rel(dir, p)
+	p, err = filepath.Abs(p)
 	if err != nil {
 		return false
 	}
 
-	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
+	for {
+		if info, err := os.Stat(p); err == nil && os.SameFile(want, info) {
+			return true
+		}
+
+		parent := filepath.Dir(p)
+		if parent == p {
+			return false
+		}
+		p = parent
+	}
 }
 
 func copyFile(src, dst string) error {

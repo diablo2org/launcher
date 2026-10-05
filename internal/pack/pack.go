@@ -85,6 +85,9 @@ func BuildManifest(dir string, opts Options) (*spec.Manifest, error) {
 	if err != nil || (base.Scheme != "https" && base.Scheme != "http") {
 		return nil, fmt.Errorf("base URL %q must be an https URL", opts.BaseURL)
 	}
+	if base.RawQuery != "" || base.ForceQuery || base.Fragment != "" {
+		return nil, fmt.Errorf("base URL %q can't have a query or fragment", opts.BaseURL)
+	}
 
 	m := &spec.Manifest{Schema: 1, Server: opts.Server, Version: opts.Version, Files: []spec.File{}}
 	seen := map[string]string{}
