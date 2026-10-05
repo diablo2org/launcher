@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Browser } from "@wailsio/runtime";
-  import { ServerService } from "../../bindings/github.com/d2org/launcher/internal/app";
-  import type { ServerInfo } from "../../bindings/github.com/d2org/launcher/internal/core";
+  import { ServerService } from "../../bindings/github.com/diablo2org/launcher/internal/app";
+  import type { ServerInfo } from "../../bindings/github.com/diablo2org/launcher/internal/core";
   import { bytes, errorText } from "./format";
   import NewsList from "./NewsList.svelte";
   import { app, type ServerData } from "./state.svelte";

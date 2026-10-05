@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/d2org/launcher/internal/spec"
+	"github.com/diablo2org/launcher/internal/spec"
 )
 
 // DefaultGatewayHeader is written when there's no existing list to keep the

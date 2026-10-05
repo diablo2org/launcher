@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/d2org/launcher/internal/spec"
+	"github.com/diablo2org/launcher/internal/spec"
 )
 
 func TestParseGatewayList(t *testing.T) {

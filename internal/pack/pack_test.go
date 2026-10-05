@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/d2org/launcher/internal/fetch"
-	"github.com/d2org/launcher/internal/spec"
+	"github.com/diablo2org/launcher/internal/fetch"
+	"github.com/diablo2org/launcher/internal/spec"
 )
 
 func write(t *testing.T, dir, rel, body string) {

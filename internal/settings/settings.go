@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/d2org/launcher/internal/paths"
-	"github.com/d2org/launcher/internal/spec"
+	"github.com/diablo2org/launcher/internal/paths"
+	"github.com/diablo2org/launcher/internal/spec"
 )
 
 // ErrFileMissing means the setting's file doesn't exist yet. The launcher

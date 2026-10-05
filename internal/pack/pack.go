@@ -14,10 +14,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/d2org/launcher/internal/fetch"
-	"github.com/d2org/launcher/internal/install"
-	"github.com/d2org/launcher/internal/paths"
-	"github.com/d2org/launcher/internal/spec"
+	"github.com/diablo2org/launcher/internal/fetch"
+	"github.com/diablo2org/launcher/internal/install"
+	"github.com/diablo2org/launcher/internal/paths"
+	"github.com/diablo2org/launcher/internal/spec"
 )
 
 // Options control how a folder becomes a manifest.

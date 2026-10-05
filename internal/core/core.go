@@ -18,13 +18,13 @@ import (
 	gosync "sync"
 	"time"
 
-	"github.com/d2org/launcher/internal/fetch"
-	"github.com/d2org/launcher/internal/install"
-	"github.com/d2org/launcher/internal/launch"
-	"github.com/d2org/launcher/internal/paths"
-	"github.com/d2org/launcher/internal/spec"
-	"github.com/d2org/launcher/internal/store"
-	"github.com/d2org/launcher/internal/sync"
+	"github.com/diablo2org/launcher/internal/fetch"
+	"github.com/diablo2org/launcher/internal/install"
+	"github.com/diablo2org/launcher/internal/launch"
+	"github.com/diablo2org/launcher/internal/paths"
+	"github.com/diablo2org/launcher/internal/spec"
+	"github.com/diablo2org/launcher/internal/store"
+	"github.com/diablo2org/launcher/internal/sync"
 )
 
 // Manager runs the launcher.

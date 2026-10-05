@@ -25,10 +25,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/d2org/launcher/internal/install"
-	"github.com/d2org/launcher/internal/pack"
-	"github.com/d2org/launcher/internal/spec"
-	"github.com/d2org/launcher/internal/store"
+	"github.com/diablo2org/launcher/internal/install"
+	"github.com/diablo2org/launcher/internal/pack"
+	"github.com/diablo2org/launcher/internal/spec"
+	"github.com/diablo2org/launcher/internal/store"
 )
 
 func main() {
@@ -332,7 +332,7 @@ func feed(name string) map[string]any {
 		"version": "https://jsonfeed.org/version/1.1",
 		"title":   name,
 		"items": []any{
-			map[string]any{"id": "3", "title": name + " on the new launcher", "url": "https://github.com/d2org/launcher",
+			map[string]any{"id": "3", "title": name + " on the new launcher", "url": "https://github.com/diablo2org/launcher",
 				"date_published": now.Format(time.RFC3339),
 				"summary": "Test news served by testenv/dev.ps1, not from " + name +
 					". Real servers publish a JSON Feed from their own site."},

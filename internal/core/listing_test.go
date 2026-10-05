@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/d2org/launcher/internal/fetch"
-	"github.com/d2org/launcher/internal/store"
+	"github.com/diablo2org/launcher/internal/fetch"
+	"github.com/diablo2org/launcher/internal/store"
 )
 
 // servers/index.json must match servers/*.json, so the published listing is

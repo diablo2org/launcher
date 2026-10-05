@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { ServerService } from "../../bindings/github.com/d2org/launcher/internal/app";
-  import type { SettingValue } from "../../bindings/github.com/d2org/launcher/internal/core";
+  import { ServerService } from "../../bindings/github.com/diablo2org/launcher/internal/app";
+  import type { SettingValue } from "../../bindings/github.com/diablo2org/launcher/internal/core";
   import { errorText } from "./format";
   import Icon from "./Icon.svelte";
   import { app } from "./state.svelte";

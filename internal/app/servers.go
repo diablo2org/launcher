@@ -6,11 +6,11 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/d2org/launcher/internal/core"
-	"github.com/d2org/launcher/internal/fetch"
-	"github.com/d2org/launcher/internal/install"
-	"github.com/d2org/launcher/internal/sync"
-	"github.com/d2org/launcher/internal/updates"
+	"github.com/diablo2org/launcher/internal/core"
+	"github.com/diablo2org/launcher/internal/fetch"
+	"github.com/diablo2org/launcher/internal/install"
+	"github.com/diablo2org/launcher/internal/sync"
+	"github.com/diablo2org/launcher/internal/updates"
 )
 
 // Host is what the service needs from the app window.

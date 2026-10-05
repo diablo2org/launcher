@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ProfileService, type CheckResult } from "../../bindings/github.com/d2org/launcher/internal/app";
+  import { ProfileService, type CheckResult } from "../../bindings/github.com/diablo2org/launcher/internal/app";
 
   // A tool for server teams: check a profile before submitting it.
   let profile = $state("");

@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/d2org/launcher/internal/fetch"
+	"github.com/diablo2org/launcher/internal/fetch"
 )
 
 func TestNewer(t *testing.T) {
@@ -31,7 +31,7 @@ func TestNewer(t *testing.T) {
 }
 
 func TestCheck(t *testing.T) {
-	body := `{"tag_name":"v0.2.0","html_url":"https://github.com/d2org/launcher/releases/tag/v0.2.0","draft":false,"prerelease":false}`
+	body := `{"tag_name":"v0.2.0","html_url":"https://github.com/diablo2org/launcher/releases/tag/v0.2.0","draft":false,"prerelease":false}`
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(body))
 	}))

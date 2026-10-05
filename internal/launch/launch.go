@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/d2org/launcher/internal/spec"
+	"github.com/diablo2org/launcher/internal/spec"
 )
 
 // Choices are the player's per-server selections that affect how the game

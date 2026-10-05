@@ -9,9 +9,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/d2org/launcher/internal/fetch"
-	"github.com/d2org/launcher/internal/spec"
-	"github.com/d2org/launcher/internal/store"
+	"github.com/diablo2org/launcher/internal/fetch"
+	"github.com/diablo2org/launcher/internal/spec"
+	"github.com/diablo2org/launcher/internal/store"
 )
 
 // Listing supplies the listed servers' profiles. The listing is the trust

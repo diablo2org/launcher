@@ -5,11 +5,11 @@ version: '3'
 
 # This information is used to generate the build assets.
 info:
-  companyName: "d2org" # The name of the company
+  companyName: "diablo2org" # The name of the company
   productName: "Launcher" # The name of the application
   productIdentifier: "org.diablo2.launcher" # The unique product identifier
   description: "Launcher for Diablo II private servers" # The application description
-  copyright: "(c) 2026 d2org contributors" # Copyright text
+  copyright: "(c) 2026 diablo2org contributors" # Copyright text
   comments: "https://diablo2.org" # Comments
   version: "0.1.0" # The application version
   # cfBundleIconName: "appicon" # The macOS icon name in Assets.car icon bundles (optional)

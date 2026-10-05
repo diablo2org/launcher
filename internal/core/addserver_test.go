@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/d2org/launcher/internal/fetch"
-	"github.com/d2org/launcher/internal/launch"
-	"github.com/d2org/launcher/internal/store"
+	"github.com/diablo2org/launcher/internal/fetch"
+	"github.com/diablo2org/launcher/internal/launch"
+	"github.com/diablo2org/launcher/internal/store"
 )
 
 // unlisted returns a manager with an empty listing, talking to h's site, and

@@ -8,7 +8,7 @@
     !define INFO_PROJECTNAME "launcher"
 !endif
 !ifndef INFO_COMPANYNAME
-    !define INFO_COMPANYNAME "d2org"
+    !define INFO_COMPANYNAME "diablo2org"
 !endif
 !ifndef INFO_PRODUCTNAME
     !define INFO_PRODUCTNAME "Launcher"
@@ -17,7 +17,7 @@
     !define INFO_PRODUCTVERSION "0.1.0"
 !endif
 !ifndef INFO_COPYRIGHT
-    !define INFO_COPYRIGHT "(c) 2026 d2org contributors"
+    !define INFO_COPYRIGHT "(c) 2026 diablo2org contributors"
 !endif
 !ifndef PRODUCT_EXECUTABLE
     !define PRODUCT_EXECUTABLE "${INFO_PROJECTNAME}.exe"

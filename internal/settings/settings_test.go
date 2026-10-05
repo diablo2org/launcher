@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/d2org/launcher/internal/spec"
+	"github.com/diablo2org/launcher/internal/spec"
 )
 
 const d2glINI = "; D2GL config\r\n" +

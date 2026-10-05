@@ -1,4 +1,4 @@
-module github.com/d2org/launcher
+module github.com/diablo2org/launcher
 
 go 1.25.0
 

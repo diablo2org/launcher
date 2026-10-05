@@ -14,8 +14,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/d2org/launcher/internal/pack"
-	"github.com/d2org/launcher/internal/spec"
+	"github.com/diablo2org/launcher/internal/pack"
+	"github.com/diablo2org/launcher/internal/spec"
 )
 
 func main() {

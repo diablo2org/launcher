@@ -7,11 +7,11 @@ import (
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 
-	"github.com/d2org/launcher/internal/app"
-	"github.com/d2org/launcher/internal/core"
-	"github.com/d2org/launcher/internal/fetch"
-	"github.com/d2org/launcher/internal/launch"
-	"github.com/d2org/launcher/internal/store"
+	"github.com/diablo2org/launcher/internal/app"
+	"github.com/diablo2org/launcher/internal/core"
+	"github.com/diablo2org/launcher/internal/fetch"
+	"github.com/diablo2org/launcher/internal/launch"
+	"github.com/diablo2org/launcher/internal/store"
 )
 
 // The built frontend is embedded, so the launcher ships as a single exe.
@@ -24,7 +24,7 @@ var exampleProfile []byte
 
 // listingURL is the published server listing: servers/index.json on the
 // repository's default branch.
-const listingURL = "https://raw.githubusercontent.com/d2org/launcher/main/servers/index.json"
+const listingURL = "https://raw.githubusercontent.com/diablo2org/launcher/main/servers/index.json"
 
 // Development settings, read from the environment. None are set in a normal
 // install.

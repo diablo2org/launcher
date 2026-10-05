@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/d2org/launcher/internal/paths"
+	"github.com/diablo2org/launcher/internal/paths"
 )
 
 // Profile is a server profile. See docs/SPEC.md section 3.

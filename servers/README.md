@@ -6,7 +6,7 @@ profile can hold.
 
 ## Adding your server
 
-You need `d2pack` from the [latest release](https://github.com/d2org/launcher/releases).
+You need `d2pack` from the [latest release](https://github.com/diablo2org/launcher/releases).
 
 1. **Build a manifest from your game files.** Point `d2pack` at the folder
    of files players need (your patched `Game.exe`, DLLs, `patch_d2.mpq` and

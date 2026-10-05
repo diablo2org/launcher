@@ -15,10 +15,10 @@ import (
 	gosync "sync"
 	"testing"
 
-	"github.com/d2org/launcher/internal/fetch"
-	"github.com/d2org/launcher/internal/launch"
-	"github.com/d2org/launcher/internal/spec"
-	"github.com/d2org/launcher/internal/store"
+	"github.com/diablo2org/launcher/internal/fetch"
+	"github.com/diablo2org/launcher/internal/launch"
+	"github.com/diablo2org/launcher/internal/spec"
+	"github.com/diablo2org/launcher/internal/store"
 )
 
 // site is a fake server's web host: it serves documents and files.

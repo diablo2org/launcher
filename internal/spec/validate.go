@@ -17,7 +17,7 @@ import (
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
 
-	"github.com/d2org/launcher/schema"
+	"github.com/diablo2org/launcher/schema"
 )
 
 var (

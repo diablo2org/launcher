@@ -1,7 +1,7 @@
 package spec
 
 import (
-	"github.com/d2org/launcher/internal/paths"
+	"github.com/diablo2org/launcher/internal/paths"
 )
 
 // File modes. See docs/SPEC.md section 4.

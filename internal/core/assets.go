@@ -6,7 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	"github.com/d2org/launcher/internal/spec"
+	"github.com/diablo2org/launcher/internal/spec"
 )
 
 // Size limits for branding images, from docs/SPEC.md section 3.

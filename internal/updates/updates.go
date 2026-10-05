@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/d2org/launcher/internal/fetch"
+	"github.com/diablo2org/launcher/internal/fetch"
 )
 
 // Release is a newer launcher release.
@@ -18,7 +18,7 @@ type Release struct {
 }
 
 // LatestURL is the GitHub API for the newest non-prerelease release.
-const LatestURL = "https://api.github.com/repos/d2org/launcher/releases/latest"
+const LatestURL = "https://api.github.com/repos/diablo2org/launcher/releases/latest"
 
 // Check returns the newest release if it is newer than current, or nil.
 // Development builds ("dev") never report an update.

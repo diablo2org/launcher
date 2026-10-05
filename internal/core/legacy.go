@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/d2org/launcher/internal/install"
+	"github.com/diablo2org/launcher/internal/install"
 )
 
 // LegacyServer is the server the old SlashDiablo launcher's settings belong to.

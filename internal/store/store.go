@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/d2org/launcher/internal/paths"
+	"github.com/diablo2org/launcher/internal/paths"
 )
 
 // State is everything the launcher remembers between runs.
@@ -70,14 +70,14 @@ func Open(dir string) (*Store, error) {
 	return &Store{dir: dir}, nil
 }
 
-// DefaultDir is %LOCALAPPDATA%\d2org\launcher, or the platform equivalent.
+// DefaultDir is %LOCALAPPDATA%\diablo2org\launcher, or the platform equivalent.
 func DefaultDir() (string, error) {
 	base, err := os.UserCacheDir()
 	if err != nil {
 		return "", err
 	}
 
-	return filepath.Join(base, "d2org", "launcher"), nil
+	return filepath.Join(base, "diablo2org", "launcher"), nil
 }
 
 // Dir is the data folder.

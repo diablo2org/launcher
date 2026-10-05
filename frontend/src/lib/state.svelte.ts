@@ -4,7 +4,7 @@ import {
   type Branding,
   type Overview,
   type UpdateProgress,
-} from "../../bindings/github.com/d2org/launcher/internal/app";
+} from "../../bindings/github.com/diablo2org/launcher/internal/app";
 import type {
   Choices,
   Ladder,
@@ -12,7 +12,7 @@ import type {
   ServerInfo,
   SettingValue,
   Status,
-} from "../../bindings/github.com/d2org/launcher/internal/core";
+} from "../../bindings/github.com/diablo2org/launcher/internal/core";
 import { errorText } from "./format";
 
 export type Page = "launch" | "ladder" | "catalog" | "checker";

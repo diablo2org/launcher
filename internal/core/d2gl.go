@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/d2org/launcher/internal/settings"
-	"github.com/d2org/launcher/internal/spec"
+	"github.com/diablo2org/launcher/internal/settings"
+	"github.com/diablo2org/launcher/internal/spec"
 )
 
 // D2GLResolutions are the window sizes d2gl offers itself, from its own list,

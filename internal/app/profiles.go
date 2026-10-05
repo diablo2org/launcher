@@ -6,7 +6,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/d2org/launcher/internal/spec"
+	"github.com/diablo2org/launcher/internal/spec"
 )
 
 // ProfileService lets the frontend check server profiles.

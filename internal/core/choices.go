@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/d2org/launcher/internal/install"
-	"github.com/d2org/launcher/internal/settings"
-	"github.com/d2org/launcher/internal/spec"
+	"github.com/diablo2org/launcher/internal/install"
+	"github.com/diablo2org/launcher/internal/settings"
+	"github.com/diablo2org/launcher/internal/spec"
 )
 
 // CustomVersion is the component "version" for the player's own files: a

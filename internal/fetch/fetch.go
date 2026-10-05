@@ -127,7 +127,7 @@ func (c *Client) get(ctx context.Context, rawURL string) (*http.Response, error)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "d2org-launcher")
+	req.Header.Set("User-Agent", "diablo2org-launcher")
 
 	resp, err := c.http.Do(req)
 	if err != nil {

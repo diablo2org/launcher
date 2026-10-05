@@ -11,7 +11,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/d2org/launcher/internal/core"
+	"github.com/diablo2org/launcher/internal/core"
 )
 
 func main() {
