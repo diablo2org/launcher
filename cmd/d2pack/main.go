@@ -3,6 +3,7 @@
 //
 //	d2pack init -id <id> -name <name> -gateway <host> -manifest <url>
 //	d2pack manifest -server <id> -version <v> -url <base url> [-once <pattern>]... [-exclude <pattern>]... [-only <pattern>]... <folder>
+//	d2pack build [-version <v>] [-out <folder>] <plan.json>
 //	d2pack check -profile <profile.json> [<manifest.json>...]
 package main
 
@@ -13,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/diablo2org/launcher/internal/pack"
 	"github.com/diablo2org/launcher/internal/spec"
@@ -30,6 +32,8 @@ func main() {
 		err = initProfile(os.Args[2:])
 	case "manifest":
 		err = manifest(os.Args[2:])
+	case "build":
+		err = build(os.Args[2:])
 	case "check":
 		err = check(os.Args[2:])
 	case "-h", "--help", "help":
@@ -59,6 +63,12 @@ func usage() {
       Run it again whenever you patch. Blizzard's base archives are always
       left out. -once marks files the player owns after the first install;
       -only keeps just matching files, to build a component's manifest.
+
+  d2pack build [-version <v>] [-out <folder>] <plan.json>
+      Build every manifest in a plan at once: each channel and component
+      version, with its files, laid out by URL in <folder> ready to upload.
+      The URLs come from the profile the plan names. -version defaults to
+      today's date, -out to upload/<version> next to the plan.
 
   d2pack check -profile <profile.json> [<manifest.json>...]
       Check a profile, and manifests against it.
@@ -141,6 +151,44 @@ func manifest(args []string) error {
 	}
 	fmt.Printf("Wrote %s: %d files, %.1f MB. Upload it with the files, to %s/manifest.json\n",
 		out, len(m.Files), float64(total)/(1<<20), strings.TrimSuffix(*base, "/"))
+
+	return nil
+}
+
+func build(args []string) error {
+	fs := flag.NewFlagSet("build", flag.ContinueOnError)
+	version := fs.String("version", time.Now().Format("2006.01.02"), "manifest version")
+	out := fs.String("out", "", "folder to build into; must not exist yet")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		return errors.New("usage: d2pack build [-version <v>] [-out <folder>] <plan.json>")
+	}
+
+	planFile := fs.Arg(0)
+	plan, err := pack.LoadPlan(planFile)
+	if err != nil {
+		return err
+	}
+
+	if *out == "" {
+		*out = filepath.Join(filepath.Dir(planFile), "upload", *version)
+	}
+
+	result, err := pack.Build(plan, pack.BuildOptions{Version: *version, Out: *out})
+	if err != nil {
+		return err
+	}
+
+	for _, b := range result.Built {
+		fmt.Printf("%-20s %4d files, %7.1f MB  %s\n", b.Name, b.Files, float64(b.Bytes)/(1<<20), b.Manifest)
+	}
+	for _, n := range result.NotBuilt {
+		fmt.Printf("%-20s not in the plan; its published manifest is unchanged\n", n)
+	}
+	fmt.Printf("\nUpload the contents of each host folder in %s to the root of that host.\n", *out)
 
 	return nil
 }

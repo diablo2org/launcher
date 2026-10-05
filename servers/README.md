@@ -43,6 +43,47 @@ You need `d2pack` from the [latest release](https://github.com/diablo2org/launch
    maintainer to). A maintainer confirms it's really your server, then
    merges, and your server appears in every launcher.
 
+## Building everything at once
+
+Once you have components, such as several maphack versions and a renderer,
+each needs its own manifest. `d2pack build` builds them all from a plan file
+kept next to your profile:
+
+```json
+{
+  "profile": "myserver.json",
+  "manifests": [
+    { "channel": "live", "source": ["patches/base", "patches/current"] },
+    { "component": "maphack", "version": "1.9.9", "source": "patches/maphack", "once": ["BH_settings.cfg"] }
+  ]
+}
+```
+
+```
+d2pack build build.json
+```
+
+The manifest URLs come from the profile, and each manifest's files are
+published in the same folder as it. The output, `upload/<version>` by
+default, mirrors those URLs: upload what's in its host folder to the root of
+that host. Every manifest is checked against the profile, and a failed build
+leaves nothing behind.
+
+Each entry takes:
+
+- `channel`, or `component` and `version`: which manifest to build.
+- `source`: a folder, or a list of folders layered in order, where a later
+  folder's file replaces an earlier one's. Paths are relative to the plan.
+  A `source` at the top of the plan is used by entries without their own.
+- `once`, `exclude`, `only`: as for `d2pack manifest`. An `exclude` at the
+  top of the plan applies to every entry.
+- `files`: the URL the files are published at, when that isn't the
+  manifest's folder.
+
+Channels and versions the plan leaves out are listed, and their published
+manifests are left as they are. [`examples/slashdiablo/build.json`](../examples/slashdiablo/build.json)
+builds SlashDiablo's from its current patch folders.
+
 ## Patching
 
 Rebuild the manifest and upload it with the new files. No pull request is
