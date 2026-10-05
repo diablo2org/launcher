@@ -64,7 +64,9 @@ func Collect(in Input) []Item {
 	items := []Item{{Name: "about.txt", What: "Launcher version and system", data: []byte(in.About), Size: int64(len(in.About))}}
 
 	add := func(name, what, source string) {
-		info, err := os.Stat(source)
+		// Lstat, so a link, which could lead outside the folder, is never
+		// taken.
+		info, err := os.Lstat(source)
 		if err != nil || !info.Mode().IsRegular() || info.Size() == 0 {
 			return
 		}
@@ -116,7 +118,7 @@ func gameCrashLogs(dir string) []string {
 	var all []found
 	for _, e := range entries {
 		name := e.Name()
-		if e.IsDir() || !isGameCrashLog(name) {
+		if !e.Type().IsRegular() || !isGameCrashLog(name) {
 			continue
 		}
 		info, err := e.Info()
@@ -187,9 +189,11 @@ func Write(w io.Writer, items []Item, home string) error {
 }
 
 // readCapped reads the end of a file, up to maxFile: the newest part of a log
-// is what matters.
+// is what matters. It opens the file within its own folder, so even if it has
+// been swapped for a link since it was listed, the read can't leave that
+// folder.
 func readCapped(path string) ([]byte, error) {
-	f, err := os.Open(path)
+	f, err := os.OpenInRoot(filepath.Dir(path), filepath.Base(path))
 	if err != nil {
 		return nil, err
 	}

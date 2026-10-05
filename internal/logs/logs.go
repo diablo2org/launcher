@@ -221,7 +221,7 @@ func (h atLeast) WithGroup(name string) slog.Handler {
 }
 
 // urlQuery matches a URL's query and fragment.
-var urlQuery = regexp.MustCompile(`(https?://[^\s?#"']*)[?#][^\s"']*`)
+var urlQuery = regexp.MustCompile(`(?i)(https?://[^\s?#"']*)[?#][^\s"']*`)
 
 // RedactURLs drops the query and fragment from every URL in s. They can
 // carry tokens, and logs end up in bug reports.

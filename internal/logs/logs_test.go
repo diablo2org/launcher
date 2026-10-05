@@ -86,10 +86,21 @@ func TestAtLeast(t *testing.T) {
 }
 
 func TestRedactURLs(t *testing.T) {
-	in := `get "https://a.net/p.json?token=secret#x": 404; see https://b.net/ok and http://c.net/q?k=v`
-	want := `get "https://a.net/p.json": 404; see https://b.net/ok and http://c.net/q`
-	if got := RedactURLs(in); got != want {
-		t.Errorf("RedactURLs = %q", got)
+	tests := []struct {
+		name, in, want string
+	}{
+		{"query and fragment",
+			`get "https://a.net/p.json?token=secret#x": 404; see https://b.net/ok and http://c.net/q?k=v`,
+			`get "https://a.net/p.json": 404; see https://b.net/ok and http://c.net/q`},
+		{"fragment only", "https://a.net/p.json#x", "https://a.net/p.json"},
+		{"uppercase scheme", "HTTPS://a.net/p.json?token=secret", "HTTPS://a.net/p.json"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := RedactURLs(tt.in); got != tt.want {
+				t.Errorf("RedactURLs = %q", got)
+			}
+		})
 	}
 }
 
@@ -137,7 +148,11 @@ func TestWriterBacksOffAfterFailedRotation(t *testing.T) {
 	for i := 0; i < 6; i++ {
 		w.Write([]byte(line))
 	}
-	if info, err := os.Stat(path); err != nil || info.Size() > 100 {
-		t.Errorf("log didn't rotate once the old file was free: %v, %v", info.Size(), err)
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Size() > 100 {
+		t.Errorf("log didn't rotate once the old file was free: size %d", info.Size())
 	}
 }

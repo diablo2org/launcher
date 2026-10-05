@@ -146,3 +146,30 @@ func TestCollectSkipsUnsafeServerIDs(t *testing.T) {
 		t.Errorf("items = %+v", items)
 	}
 }
+
+// A crash log that is a link, which could lead to any file, is left out, and
+// reading can't follow one out of its folder.
+func TestCrashLogLinksIgnored(t *testing.T) {
+	root := t.TempDir()
+	base := filepath.Join(root, "Diablo II")
+	outside := filepath.Join(root, "secret.txt")
+	write(t, outside, "not for the report")
+
+	dir := install.ServerDir(base, "ok")
+	os.MkdirAll(dir, 0o755)
+	link := filepath.Join(dir, "D2260101.txt")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Skipf("can't make a symlink here: %v", err)
+	}
+
+	items := Collect(Input{DataDir: filepath.Join(root, "data"), Base: base, Servers: []string{"ok"}})
+	for _, it := range items {
+		if strings.HasPrefix(it.Name, "game/") {
+			t.Errorf("linked crash log collected: %s", it.Name)
+		}
+	}
+
+	if _, err := readCapped(link); err == nil {
+		t.Error("read followed a link out of its folder")
+	}
+}
