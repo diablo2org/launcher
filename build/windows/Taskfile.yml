@@ -149,9 +149,9 @@ tasks:
       INSTALL_SCOPE: '{{.INSTALL_SCOPE | default "machine"}}'
       SAFE_VERSION: *safe_version
       # A tagged build's installer carries its version: in its own file
-      # properties and as the DisplayVersion in Installed apps. NSIS needs
-      # the numeric part, 1.2.3 of v1.2.3-beta.1.
-      NSIS_VERSION: '{{if .SAFE_VERSION}}-DINFO_PRODUCTVERSION={{regexReplaceAll "[-+].*$" (trimPrefix "v" .SAFE_VERSION) ""}} {{end}}'
+      # properties and as the DisplayVersion in Installed apps. Windows'
+      # numeric fields get 1.2.3 of v1.2.3-beta.1; the text fields get it all.
+      NSIS_VERSION: '{{if .SAFE_VERSION}}-DINFO_PRODUCTVERSION={{regexReplaceAll "[-+].*$" (trimPrefix "v" .SAFE_VERSION) ""}} -DINFO_PRODUCTVERSION_TEXT={{trimPrefix "v" .SAFE_VERSION}} {{end}}'
 
   create:msix:package:
     summary: Creates an MSIX package
