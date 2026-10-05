@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- The launcher icon's sword and ring; build/appicon.py draws the same
+       shapes for build/appicon.png. -->
+  <circle cx="512" cy="526" r="270" fill="none" stroke="#d6b26e" stroke-opacity="0.47" stroke-width="12"/>
+  <polygon points="512,884 468,768 468,352 512,352" fill="#eee3cb"/>
+  <polygon points="512,884 556,768 556,352 512,352" fill="#c4b496"/>
+  <polygon points="292,318 732,318 756,346 732,374 292,374 268,346" fill="#cda862"/>
+  <rect x="490" y="180" width="44" height="140" rx="8" fill="#603a26"/>
+  <circle cx="512" cy="162" r="42" fill="#cda862"/>
+</svg>
