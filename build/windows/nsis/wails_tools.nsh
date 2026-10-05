@@ -16,11 +16,6 @@
 !ifndef INFO_PRODUCTVERSION
     !define INFO_PRODUCTVERSION "0.1.0"
 !endif
-# The version as people read it, such as 1.2.3-beta.1. INFO_PRODUCTVERSION
-# stays numeric, as Windows' numeric version fields need.
-!ifndef INFO_PRODUCTVERSION_TEXT
-    !define INFO_PRODUCTVERSION_TEXT "${INFO_PRODUCTVERSION}"
-!endif
 !ifndef INFO_COPYRIGHT
     !define INFO_COPYRIGHT "(c) 2026 diablo2org contributors"
 !endif
@@ -131,7 +126,7 @@ RequestExecutionLevel "${REQUEST_EXECUTION_LEVEL}"
     !if "${WAILS_INSTALL_SCOPE}" == "user"
         WriteRegStr HKCU "${UNINST_KEY}" "Publisher" "${INFO_COMPANYNAME}"
         WriteRegStr HKCU "${UNINST_KEY}" "DisplayName" "${INFO_PRODUCTNAME}"
-        WriteRegStr HKCU "${UNINST_KEY}" "DisplayVersion" "${INFO_PRODUCTVERSION_TEXT}"
+        WriteRegStr HKCU "${UNINST_KEY}" "DisplayVersion" "${INFO_PRODUCTVERSION}"
         WriteRegStr HKCU "${UNINST_KEY}" "DisplayIcon" "$INSTDIR\${PRODUCT_EXECUTABLE}"
         WriteRegStr HKCU "${UNINST_KEY}" "UninstallString" "$\"$INSTDIR\uninstall.exe$\""
         WriteRegStr HKCU "${UNINST_KEY}" "QuietUninstallString" "$\"$INSTDIR\uninstall.exe$\" /S"
@@ -142,7 +137,7 @@ RequestExecutionLevel "${REQUEST_EXECUTION_LEVEL}"
     !else
         WriteRegStr HKLM "${UNINST_KEY}" "Publisher" "${INFO_COMPANYNAME}"
         WriteRegStr HKLM "${UNINST_KEY}" "DisplayName" "${INFO_PRODUCTNAME}"
-        WriteRegStr HKLM "${UNINST_KEY}" "DisplayVersion" "${INFO_PRODUCTVERSION_TEXT}"
+        WriteRegStr HKLM "${UNINST_KEY}" "DisplayVersion" "${INFO_PRODUCTVERSION}"
         WriteRegStr HKLM "${UNINST_KEY}" "DisplayIcon" "$INSTDIR\${PRODUCT_EXECUTABLE}"
         WriteRegStr HKLM "${UNINST_KEY}" "UninstallString" "$\"$INSTDIR\uninstall.exe$\""
         WriteRegStr HKLM "${UNINST_KEY}" "QuietUninstallString" "$\"$INSTDIR\uninstall.exe$\" /S"

@@ -35,6 +35,13 @@ Unicode true
 ####
 !include "wails_tools.nsh"
 
+# The version as people read it, such as 1.2.3-beta.1, from the Windows
+# Taskfile; INFO_PRODUCTVERSION stays numeric, as Windows' numeric version
+# fields need. Kept here, not in wails_tools.nsh, which Wails regenerates.
+!ifndef INFO_PRODUCTVERSION_TEXT
+    !define INFO_PRODUCTVERSION_TEXT "${INFO_PRODUCTVERSION}"
+!endif
+
 # The version information for this two must consist of 4 parts
 VIProductVersion "${INFO_PRODUCTVERSION}.0"
 VIFileVersion    "${INFO_PRODUCTVERSION}.0"
@@ -100,6 +107,14 @@ Section
     !insertmacro wails.associateCustomProtocols
     
     !insertmacro wails.writeUninstaller
+
+    # Wails' macro writes the numeric version; Installed apps should show the
+    # full one. Its SetRegView 64 still applies.
+    !if "${WAILS_INSTALL_SCOPE}" == "user"
+        WriteRegStr HKCU "${UNINST_KEY}" "DisplayVersion" "${INFO_PRODUCTVERSION_TEXT}"
+    !else
+        WriteRegStr HKLM "${UNINST_KEY}" "DisplayVersion" "${INFO_PRODUCTVERSION_TEXT}"
+    !endif
 SectionEnd
 
 Section "uninstall" 
