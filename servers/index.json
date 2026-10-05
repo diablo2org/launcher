@@ -1,4 +1,255 @@
 {
   "schema": 1,
-  "servers": []
+  "servers": [
+    {
+      "$schema": "../schema/server-profile.schema.json",
+      "schema": 1,
+      "id": "slashdiablo",
+      "name": "SlashDiablo",
+      "summary": "Classic 1.13c ladder, running since 2012.",
+      "version": 1,
+      "minLauncher": "0.1.0",
+      "links": {
+        "website": "https://slashdiablo.net",
+        "discord": "https://discord.gg/0Xeb4YQwnUVhxisY",
+        "forum": "https://old.reddit.com/r/slashdiablo"
+      },
+      "branding": {
+        "logo": {
+          "url": "https://slashdiablo.net/files/launcher/logo.png",
+          "sha256": "fb71b260addce17cf5c6f56033795918f482acc1bed3d2c4e79577de81904a3e"
+        },
+        "background": {
+          "url": "https://slashdiablo.net/files/launcher/background.jpg",
+          "sha256": "73e07c5020026a50c827abab009eb854d09eab78f731a9be948eae8e3c4c24bb"
+        },
+        "accent": "#5c0202"
+      },
+      "hosts": [
+        "slashdiablo.net"
+      ],
+      "game": {
+        "version": "1.13c",
+        "expansion": true,
+        "baseArchives": "link",
+        "saves": "shared"
+      },
+      "gateways": [
+        {
+          "name": "SlashDiablo",
+          "host": "play.slashdiablo.net",
+          "timezone": 0,
+          "realm": "Slash Diablo"
+        }
+      ],
+      "channels": [
+        {
+          "id": "live",
+          "name": "Live",
+          "manifest": "https://slashdiablo.net/files/launcher/live/manifest.json"
+        }
+      ],
+      "components": [
+        {
+          "id": "maphack",
+          "name": "Maphack",
+          "kind": "bh",
+          "default": "1.9.9",
+          "versions": [
+            {
+              "id": "1.9.9",
+              "manifest": "https://slashdiablo.net/files/launcher/maphack/1.9.9/manifest.json"
+            },
+            {
+              "id": "beta-1.9.10",
+              "manifest": "https://slashdiablo.net/files/launcher/maphack/beta-1.9.10/manifest.json"
+            },
+            {
+              "id": "1.9.8",
+              "manifest": "https://slashdiablo.net/files/launcher/maphack/1.9.8/manifest.json"
+            },
+            {
+              "id": "1.9.6",
+              "manifest": "https://slashdiablo.net/files/launcher/maphack/1.9.6/manifest.json"
+            }
+          ]
+        },
+        {
+          "id": "hd",
+          "name": "HD mod",
+          "versions": [
+            {
+              "id": "3.0",
+              "manifest": "https://slashdiablo.net/files/launcher/hd/3.0/manifest.json"
+            },
+            {
+              "id": "2.0",
+              "manifest": "https://slashdiablo.net/files/launcher/hd/2.0/manifest.json"
+            },
+            {
+              "id": "1.0",
+              "manifest": "https://slashdiablo.net/files/launcher/hd/1.0/manifest.json"
+            }
+          ],
+          "conflicts": [
+            "d2gl"
+          ]
+        },
+        {
+          "id": "d2gl",
+          "name": "D2GL renderer",
+          "kind": "d2gl",
+          "flags": [
+            "-3dfx"
+          ],
+          "versions": [
+            {
+              "id": "1.3.3",
+              "manifest": "https://slashdiablo.net/files/launcher/d2gl/1.3.3/manifest.json"
+            }
+          ],
+          "conflicts": [
+            "hd"
+          ]
+        }
+      ],
+      "settings": [
+        {
+          "id": "windowed",
+          "label": "Windowed",
+          "group": "Game",
+          "type": "bool",
+          "target": {
+            "flag": "-w"
+          }
+        },
+        {
+          "id": "no-sound",
+          "label": "No sound",
+          "group": "Game",
+          "type": "bool",
+          "target": {
+            "flag": "-ns"
+          }
+        },
+        {
+          "id": "reveal-map",
+          "label": "Reveal map",
+          "group": "Maphack",
+          "component": "maphack",
+          "type": "bool",
+          "target": {
+            "file": "BH_settings.cfg",
+            "format": "bh",
+            "key": "Reveal Map"
+          }
+        },
+        {
+          "id": "show-monsters",
+          "label": "Show monsters",
+          "group": "Maphack",
+          "component": "maphack",
+          "type": "bool",
+          "target": {
+            "file": "BH_settings.cfg",
+            "format": "bh",
+            "key": "Show Monsters"
+          }
+        },
+        {
+          "id": "show-missiles",
+          "label": "Show missiles",
+          "group": "Maphack",
+          "component": "maphack",
+          "type": "bool",
+          "target": {
+            "file": "BH_settings.cfg",
+            "format": "bh",
+            "key": "Show Missiles"
+          }
+        },
+        {
+          "id": "show-sockets",
+          "label": "Show sockets",
+          "group": "Maphack",
+          "component": "maphack",
+          "type": "bool",
+          "target": {
+            "file": "BH_settings.cfg",
+            "format": "bh",
+            "key": "Show Sockets"
+          }
+        },
+        {
+          "id": "show-ilvl",
+          "label": "Show item level",
+          "group": "Maphack",
+          "component": "maphack",
+          "type": "bool",
+          "target": {
+            "file": "BH_settings.cfg",
+            "format": "bh",
+            "key": "Show iLvl"
+          }
+        },
+        {
+          "id": "experience-meter",
+          "label": "Experience meter",
+          "group": "Maphack",
+          "component": "maphack",
+          "type": "bool",
+          "target": {
+            "file": "BH_settings.cfg",
+            "format": "bh",
+            "key": "Experience Meter"
+          }
+        },
+        {
+          "id": "unlock-cursor",
+          "label": "Unlock cursor",
+          "description": "Let the mouse leave the game window.",
+          "group": "D2GL",
+          "component": "d2gl",
+          "type": "bool",
+          "default": false,
+          "target": {
+            "file": "d2gl.ini",
+            "format": "ini",
+            "section": "Screen",
+            "key": "unlock_cursor"
+          }
+        },
+        {
+          "id": "vsync",
+          "label": "Vertical sync",
+          "group": "D2GL",
+          "component": "d2gl",
+          "type": "bool",
+          "target": {
+            "file": "d2gl.ini",
+            "format": "ini",
+            "section": "Screen",
+            "key": "vsync"
+          }
+        }
+      ],
+      "launch": {
+        "exe": "Game.exe",
+        "defaultFlags": [
+          "-skiptobnet"
+        ],
+        "allowedFlags": [
+          "-w",
+          "-3dfx",
+          "-skip",
+          "-skiptobnet",
+          "-ns",
+          "-nofixaspect",
+          "-direct",
+          "-txt"
+        ],
+        "maxInstances": 8
+      }
+    }
+  ]
 }

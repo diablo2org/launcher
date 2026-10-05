@@ -22,6 +22,10 @@ You need `d2pack` from the [latest release](https://github.com/diablo2org/launch
 
 2. **Upload** the folder, including the new `manifest.json`, to that URL.
 
+   Leave HTML files out (`-exclude "*.html"`). Some hosts and CDNs, such
+   as Cloudflare with Web Analytics on, add a script to every HTML page
+   they serve, so the file players download never matches its hash.
+
 3. **Write your profile:**
 
    ```
