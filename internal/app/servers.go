@@ -23,6 +23,10 @@ type Host struct {
 	Updates *fetch.Client
 	// OpenFolder shows a folder in the file manager.
 	OpenFolder func(path string) error
+	// RunInstaller starts a downloaded launcher installer.
+	RunInstaller func(path string) error
+	// Quit closes the launcher.
+	Quit func()
 }
 
 // ServerService is how the frontend drives the launcher.

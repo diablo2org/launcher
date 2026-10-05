@@ -3,7 +3,10 @@ package main
 import (
 	"embed"
 	"log"
+	"net/url"
 	"os"
+	"os/exec"
+	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 
@@ -12,6 +15,7 @@ import (
 	"github.com/diablo2org/launcher/internal/fetch"
 	"github.com/diablo2org/launcher/internal/launch"
 	"github.com/diablo2org/launcher/internal/store"
+	"github.com/diablo2org/launcher/internal/updates"
 )
 
 // The built frontend is embedded, so the launcher ships as a single exe.
@@ -34,12 +38,16 @@ const (
 	envListing = "LAUNCHER_LISTING_DIR"
 	// envDevCA is a certificate to trust, for cmd/devserve.
 	envDevCA = "LAUNCHER_DEV_CA"
+	// envUpdates is a server to check for launcher updates instead of
+	// GitHub; see updates.UseSource.
+	envUpdates = "LAUNCHER_UPDATES_URL"
 	// envData replaces the data folder, to keep test runs separate.
 	envData = "LAUNCHER_DATA_DIR"
 )
 
 func init() {
 	application.RegisterEvent[app.UpdateProgress]("update:progress")
+	application.RegisterEvent[app.LauncherUpdateProgress]("launcher:update")
 }
 
 func main() {
@@ -82,7 +90,12 @@ func main() {
 
 	var a *application.App
 	host := app.Host{
-		Updates:    fetch.New([]string{"api.github.com"}),
+		Updates: updatesClient(clientOpts),
+		// The installer runs on its own, shown to the player, and replaces
+		// this launcher once it has closed.
+		RunInstaller: func(path string) error { return exec.Command(path).Start() },
+		// Quit from a frontend call returns first, so the call completes.
+		Quit:       func() { go func() { time.Sleep(300 * time.Millisecond); a.Quit() }() },
 		OpenFolder: func(path string) error { return a.Env.OpenFileManager(path, false) },
 		Emit:       func(name string, data any) { a.Event.Emit(name, data) },
 		PickFolder: func(title string) (string, error) {
@@ -125,4 +138,21 @@ func main() {
 	if err := a.Run(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// updatesClient fetches launcher releases from GitHub, or from the server in
+// LAUNCHER_UPDATES_URL.
+func updatesClient(opts []fetch.Option) *fetch.Client {
+	base := os.Getenv(envUpdates)
+	if base == "" {
+		return fetch.New(updates.Hosts)
+	}
+
+	u, err := url.Parse(base)
+	if err != nil || u.Hostname() == "" {
+		log.Fatalf("%s: %q is not a URL", envUpdates, base)
+	}
+	updates.UseSource(base)
+
+	return fetch.New([]string{u.Hostname()}, opts...)
 }

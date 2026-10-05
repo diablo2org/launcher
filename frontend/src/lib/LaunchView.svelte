@@ -130,13 +130,34 @@
       <NewsList {data} />
     </div>
     {#if app.update}
-      <button
-        class="title absolute right-4 bottom-3 text-[10px] !text-date hover:!text-title"
-        title="A newer launcher is available. Opens the download page."
-        onclick={() => Browser.OpenURL(app.update!.url)}
-      >
-        {app.update.version} available ↗
-      </button>
+      {@const u = app.launcherUpdate}
+      <div class="absolute right-4 bottom-3 flex items-center gap-3 text-[10px]">
+        {#if app.updateError}
+          <span class="text-bad" title={app.updateError}>Update failed</span>
+        {/if}
+        {#if u}
+          <span class="title !text-date" role="status">
+            {u.total && u.done >= u.total ? "Starting installer…" : `Downloading ${app.update.version} · ${u.total ? Math.floor((u.done / u.total) * 100) : 0}%`}
+          </span>
+        {:else if app.update.installer}
+          <button
+            class="title !text-date hover:!text-title"
+            title={`Downloads the ${app.update.version} installer (${bytes(app.update.installer.size)}), checks it, and runs it. The launcher closes while it installs.`}
+            onclick={() => app.installUpdate()}
+          >
+            Update to {app.update.version}
+          </button>
+          <button class="title !text-muted hover:!text-title" title="What's new" aria-label="What's new" onclick={() => Browser.OpenURL(app.update!.url)}>↗</button>
+        {:else}
+          <button
+            class="title !text-date hover:!text-title"
+            title="A newer launcher is available. Opens the download page."
+            onclick={() => Browser.OpenURL(app.update!.url)}
+          >
+            {app.update.version} available ↗
+          </button>
+        {/if}
+      </div>
     {:else}
       <p class="title absolute right-4 bottom-3 text-[10px] !text-muted">{app.version}</p>
     {/if}
