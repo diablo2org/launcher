@@ -296,28 +296,42 @@ func TestBuildLeavesOtherFoldersAlone(t *testing.T) {
 	}
 }
 
+// link makes link point at target, as a symlink or, on Windows without the
+// privilege for one, a junction.
+func link(t *testing.T, target, link string) {
+	t.Helper()
+
+	err := os.Symlink(target, link)
+	if err == nil {
+		return
+	}
+	if runtime.GOOS != "windows" {
+		t.Skipf("can't make a symlink here: %v", err)
+	}
+	if out, err := exec.Command("cmd", "/c", "mklink", "/J", link, target).CombinedOutput(); err != nil {
+		t.Skipf("can't make a symlink or junction here: %v %s", err, out)
+	}
+}
+
 func TestBuildRejectsOutputLinkedIntoSource(t *testing.T) {
-	plan, root := buildSetup(t)
+	for _, nested := range []string{"", "data/global"} {
+		t.Run("source/"+nested, func(t *testing.T) {
+			plan, root := buildSetup(t)
 
-	// root/link points at the game folder, so root/link/upload is inside it
-	// although its path doesn't say so.
-	link := filepath.Join(root, "link")
-	if err := os.Symlink(plan.Source[0], link); err != nil {
-		// Windows needs a privilege for symlinks but not for junctions.
-		if runtime.GOOS != "windows" {
-			t.Skipf("can't make a symlink here: %v", err)
-		}
-		if out, err := exec.Command("cmd", "/c", "mklink", "/J", link, plan.Source[0]).CombinedOutput(); err != nil {
-			t.Skipf("can't make a symlink or junction here: %v %s", err, out)
-		}
-	}
-	out := filepath.Join(link, "upload")
+			// root/link points into the game folder, so root/link/upload is
+			// inside it although its path doesn't say so.
+			target := filepath.Join(plan.Source[0], filepath.FromSlash(nested))
+			os.MkdirAll(target, 0o755)
+			link(t, target, filepath.Join(root, "link"))
+			out := filepath.Join(root, "link", "upload")
 
-	_, err := Build(plan, BuildOptions{Version: "1", Out: out})
-	if err == nil || !strings.Contains(err.Error(), "inside the source") {
-		t.Fatalf("err = %v, want one about the source", err)
+			_, err := Build(plan, BuildOptions{Version: "1", Out: out})
+			if err == nil || !strings.Contains(err.Error(), "inside the source") {
+				t.Fatalf("err = %v, want one about the source", err)
+			}
+			noPartial(t, out)
+		})
 	}
-	noPartial(t, out)
 }
 
 func TestLoadPlan(t *testing.T) {

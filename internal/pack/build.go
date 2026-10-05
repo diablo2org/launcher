@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/url"
 	"os"
 	"path"
@@ -53,6 +54,7 @@ type PlanEntry struct {
 // same file, the later one's is used. In JSON it is a string or a list.
 type Sources []string
 
+// UnmarshalJSON accepts a single folder or a list of folders.
 func (s *Sources) UnmarshalJSON(data []byte) error {
 	var one string
 	if err := json.Unmarshal(data, &one); err == nil {
@@ -301,7 +303,11 @@ func (b *builder) build(e PlanEntry, manifestURL string) (*Built, error) {
 		if info, err := os.Stat(source); err != nil || !info.IsDir() {
 			return nil, fmt.Errorf("source %s is not a folder", source)
 		}
-		if inside(source, b.tmp) {
+		in, err := contains(source, b.tmp)
+		if err != nil {
+			return nil, err
+		}
+		if in {
 			return nil, fmt.Errorf("the output folder can't be inside the source folder %s", source)
 		}
 	}
@@ -462,30 +468,38 @@ func urlPath(raw string) (string, error) {
 	return rel, nil
 }
 
-// inside reports whether p is dir or somewhere under it. It compares
-// folders by identity, not by name, so a symlink or junction can't hide it.
-func inside(dir, p string) bool {
+// contains reports whether dir is under source. It walks source the way
+// BuildManifest does, which doesn't follow links, and compares folders by
+// identity, so dir can't hide behind a symlink or junction to any folder in
+// the source.
+func contains(source, dir string) (bool, error) {
 	want, err := os.Stat(dir)
 	if err != nil {
-		return false
+		return false, err
 	}
 
-	p, err = filepath.Abs(p)
-	if err != nil {
-		return false
-	}
-
-	for {
-		if info, err := os.Stat(p); err == nil && os.SameFile(want, info) {
-			return true
+	found := false
+	err = filepath.WalkDir(source, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() {
+			return nil
 		}
 
-		parent := filepath.Dir(p)
-		if parent == p {
-			return false
+		info, err := os.Stat(p)
+		if err != nil {
+			return err
 		}
-		p = parent
-	}
+		if os.SameFile(want, info) {
+			found = true
+			return filepath.SkipAll
+		}
+
+		return nil
+	})
+
+	return found, err
 }
 
 func copyFile(src, dst string) error {
