@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/diablo2org/launcher/internal/updates"
 )
@@ -34,8 +36,11 @@ func (s *ServerService) InstallUpdate(ctx context.Context) error {
 		return errors.New("there's no update to install; download it from the release page")
 	}
 
-	dir := filepath.Join(os.TempDir(), "diablo2org-launcher-update")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	// A folder of its own, so two launchers updating at once can't remove
+	// each other's installer.
+	removeOldUpdates(os.TempDir())
+	dir, err := os.MkdirTemp("", updateDirPrefix)
+	if err != nil {
 		return err
 	}
 
@@ -56,4 +61,28 @@ func (s *ServerService) InstallUpdate(ctx context.Context) error {
 	s.host.Quit()
 
 	return nil
+}
+
+// updateDirPrefix starts the name of each update attempt's folder in the
+// temporary folder.
+const updateDirPrefix = "diablo2org-launcher-update-"
+
+// removeOldUpdates removes update folders left from earlier attempts. A
+// started installer runs from its folder, so only folders a day old go.
+func removeOldUpdates(tmp string) {
+	entries, err := os.ReadDir(tmp)
+	if err != nil {
+		return
+	}
+
+	for _, e := range entries {
+		if !e.IsDir() || !strings.HasPrefix(e.Name(), updateDirPrefix) {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil || time.Since(info.ModTime()) < 24*time.Hour {
+			continue
+		}
+		os.RemoveAll(filepath.Join(tmp, e.Name()))
+	}
 }
