@@ -33,12 +33,12 @@ jobs:
         run: go install github.com/wailsapp/wails/v3/cmd/wails3@${{ env.WAILS_VERSION }}
 
       # Covers the spec: schemas, examples, every listing entry in servers/
-      # and that servers/index.json is up to date.
+      # and that servers/index.json is up to date; and the build tools.
       - name: Go tests
-        run: go test ./internal/...
+        run: go test ./internal/... ./build/...
 
       - name: Go vet
-        run: go vet ./internal/... ./cmd/...
+        run: go vet ./internal/... ./cmd/... ./build/...
 
       - name: Frontend install
         working-directory: frontend
