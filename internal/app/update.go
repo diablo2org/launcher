@@ -3,9 +3,9 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/diablo2org/launcher/internal/updates"
@@ -42,6 +42,9 @@ func (s *ServerService) InstallUpdate(ctx context.Context) error {
 	if err := os.MkdirAll(s.host.UpdatesDir, 0o755); err != nil {
 		return err
 	}
+	if err := plainDir(s.host.UpdatesDir); err != nil {
+		return err
+	}
 	removeOldUpdates(s.host.UpdatesDir)
 	dir, err := os.MkdirTemp(s.host.UpdatesDir, "attempt-")
 	if err != nil {
@@ -70,13 +73,27 @@ func (s *ServerService) InstallUpdate(ctx context.Context) error {
 // removeOldUpdates removes earlier attempts' folders from the launcher's
 // updates folder. A started installer runs from its folder, so only folders
 // a day old go.
+//
+// Removal goes through an os.Root on dir, so nothing outside it can be
+// removed, even if an entry is replaced by a link meanwhile.
 func removeOldUpdates(dir string) {
+	if plainDir(dir) != nil {
+		return
+	}
+
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return
+	}
+	defer root.Close()
+
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return
 	}
 
 	for _, e := range entries {
+		// Links, junctions included, aren't IsDir, so they're left alone.
 		if !e.IsDir() {
 			continue
 		}
@@ -84,6 +101,20 @@ func removeOldUpdates(dir string) {
 		if err != nil || time.Since(info.ModTime()) < 24*time.Hour {
 			continue
 		}
-		os.RemoveAll(filepath.Join(dir, e.Name()))
+		root.RemoveAll(e.Name())
 	}
+}
+
+// plainDir returns an error unless dir is a folder itself, not a link or
+// junction to one, which could send downloads and cleanup somewhere else.
+func plainDir(dir string) error {
+	info, err := os.Lstat(dir)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("%s is a link or file, not a folder; remove it and try again", dir)
+	}
+
+	return nil
 }
