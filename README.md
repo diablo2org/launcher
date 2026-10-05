@@ -84,6 +84,19 @@ folder made of hard links to your archives:
 key art. Your Diablo II folder is only read. Pressing Play does write the
 Battle.net registry values, as a real launch would.
 
+Setting `LAUNCHER_DEVTOOLS_PORT` opens WebView2's DevTools protocol on that
+port, so a script can drive and screenshot the page.
+
+### Logs and bug reports
+
+The launcher logs to `logs\launcher.log` in its data folder
+(`%LOCALAPPDATA%\diablo2org\launcher`), keeping three older files of up to
+1 MB each, and writes any crash to `logs\crash.log`. Settings, General,
+Bug report shows players what a report holds, then saves it as a zip:
+those logs, `state.json`, and the newest Diablo II crash logs (`D2*.txt`)
+from each server folder, with the user folder replaced by `%USERPROFILE%`.
+Nothing is uploaded.
+
 ### Layout
 
 - `internal/spec`: parses and checks profiles, manifests and listing
@@ -97,6 +110,8 @@ Battle.net registry values, as a real launch would.
   archives.
 - `internal/settings`: surgical edits to ini and BH settings files.
 - `internal/launch`: Battle.net registry values and starting boxes.
+- `internal/logs`, `internal/report`: the log file, crash capture and bug
+  reports.
 - `internal/core`: everything the launcher does, independent of the UI.
 - `internal/app`: the thin services the frontend calls.
 - `frontend/`: Svelte 5, TypeScript and Tailwind.

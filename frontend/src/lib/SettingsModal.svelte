@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { ServerService } from "../../bindings/github.com/diablo2org/launcher/internal/app";
+  import { ServerService, SupportService } from "../../bindings/github.com/diablo2org/launcher/internal/app";
   import type { SettingValue } from "../../bindings/github.com/diablo2org/launcher/internal/core";
-  import { errorText } from "./format";
+  import type { Item } from "../../bindings/github.com/diablo2org/launcher/internal/report";
+  import { bytes, errorText } from "./format";
   import Icon from "./Icon.svelte";
   import { app } from "./state.svelte";
   import Toggle from "./Toggle.svelte";
@@ -46,6 +47,31 @@
       error = errorText(err);
     }
     await data?.refresh();
+  }
+
+  // A bug report is shown in full before it's saved: nothing goes in that
+  // the player hasn't seen listed.
+  let reportItems = $state<Item[] | null>(null);
+  let reportSaved = $state("");
+
+  async function previewReport() {
+    reportSaved = "";
+    await run(async () => (reportItems = await SupportService.ReportContents()));
+  }
+
+  // Brings the list and its Save button into view when it opens.
+  function reveal(node: HTMLElement) {
+    node.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+
+  async function saveReport() {
+    await run(async () => {
+      const path = await SupportService.SaveReport();
+      if (path) {
+        reportSaved = path;
+        reportItems = null;
+      }
+    });
   }
 
   const maxBoxes = $derived(Math.max(1, profile?.launch?.maxInstances ?? 1));
@@ -180,6 +206,41 @@
             <Icon name="tool" size={14} /> Open
           </button>
         </div>
+
+        <div class="flex items-center gap-4 border-b border-line py-4">
+          {@render row("Bug report", "Save the launcher's logs and Diablo II's crash logs as a zip, to attach when asking for help.", false)}
+          <button
+            class="title flex items-center gap-2 rounded-[3px] border border-edge px-4 py-2 text-[12px] hover:border-muted"
+            onclick={() => run(() => SupportService.OpenLogs())}
+          >
+            <Icon name="folder" size={14} /> Logs
+          </button>
+          <button class="title rounded-[3px] border border-edge px-4 py-2 text-[12px] hover:border-muted" onclick={previewReport}>Create</button>
+        </div>
+        {#if reportItems}
+          <div class="border-b border-line py-4 text-[11px]" use:reveal>
+            <p class="text-muted">
+              The report holds these files. Your Windows user folder is replaced with %USERPROFILE%. Nothing is sent anywhere: you choose where to save
+              it and who to give it to.
+            </p>
+            <ul class="mt-3 flex flex-col gap-1">
+              {#each reportItems as it (it.name)}
+                <li class="flex gap-4">
+                  <span class="min-w-0 flex-1 truncate">{it.name}</span>
+                  <span class="text-muted">{it.what}</span>
+                  <span class="w-16 text-right text-muted">{bytes(it.size)}</span>
+                </li>
+              {/each}
+            </ul>
+            <div class="mt-4 flex gap-3">
+              <button class="title rounded-[3px] bg-accent px-4 py-2 text-[12px] !text-white hover:brightness-125" onclick={saveReport}>Save report</button>
+              <button class="title rounded-[3px] border border-edge px-4 py-2 text-[12px] hover:border-muted" onclick={() => (reportItems = null)}>Cancel</button>
+            </div>
+          </div>
+        {/if}
+        {#if reportSaved}
+          <p class="border-b border-line py-3 text-[11px] text-muted">Saved to {reportSaved}</p>
+        {/if}
 
         <p class="py-4 text-[11px] text-muted">Launcher {app.version}</p>
       {:else if tab === "Game" && profile && data?.choices}
