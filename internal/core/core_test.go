@@ -14,6 +14,7 @@ import (
 	"strings"
 	gosync "sync"
 	"testing"
+	"time"
 
 	"github.com/diablo2org/launcher/internal/fetch"
 	"github.com/diablo2org/launcher/internal/launch"
@@ -327,6 +328,140 @@ func TestTurnOffUnrecordedComponent(t *testing.T) {
 	}
 	if !h.exists("d2gl.ini") {
 		t.Error("the hand-edited d2gl.ini was removed; without a record only exact matches may go")
+	}
+}
+
+// Verify finds a file damaged in a way the remembered hashes can't see: same
+// size, same modification time. The player's own files aren't flagged.
+func TestVerify(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	h.m.Servers(ctx)
+
+	if err := h.m.Update(ctx, "slash", false, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	// Remember the hashes, with times old enough to be trusted.
+	game := filepath.Join(h.base, "slash", "Game.exe")
+	old := time.Now().Add(-time.Hour)
+	for _, f := range []string{"Game.exe", "glide3x.dll", "BH.dll", "BH_settings.cfg"} {
+		os.Chtimes(filepath.Join(h.base, "slash", f), old, old)
+	}
+	if st := h.m.Status(ctx, "slash"); !st.UpToDate {
+		t.Fatalf("after install: %+v", st)
+	}
+
+	os.WriteFile(game, []byte("game 1.13X"), 0o644)
+	os.Chtimes(game, old, old)
+	os.WriteFile(filepath.Join(h.base, "slash", "BH_settings.cfg"), []byte("Reveal Map: True\r\n"), 0o644)
+
+	if st := h.m.Status(ctx, "slash"); !st.UpToDate {
+		t.Fatalf("the cached check saw the damage, so this test proves nothing: %+v", st)
+	}
+
+	st := h.m.Verify(ctx, "slash")
+	if st.UpToDate || st.UpdateFiles != 1 || st.UpdateBytes != int64(len("game 1.13c")) {
+		t.Fatalf("Verify = %+v, want Game.exe to repair", st)
+	}
+
+	if err := h.m.Update(ctx, "slash", false, nil); err != nil {
+		t.Fatal(err)
+	}
+	if h.read(t, "Game.exe") != "game 1.13c" || h.read(t, "BH_settings.cfg") != "Reveal Map: True\r\n" {
+		t.Error("repair didn't restore Game.exe, or replaced the player's settings")
+	}
+	if st := h.m.Verify(ctx, "slash"); !st.UpToDate {
+		t.Errorf("after repair: %+v", st)
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestVerifyReservesServer(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	if err := h.m.Update(ctx, "slash", false, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	// Hold verification in its first manifest request while trying competing
+	// operations. Only that request blocks, so a missing reservation fails.
+	started, release := make(chan struct{}), make(chan struct{})
+	defer close(release)
+	first := make(chan struct{}, 1)
+	first <- struct{}{}
+	transport := h.site.srv.Client().Transport
+	h.m.clientOpts = []fetch.Option{fetch.WithHTTPClient(&http.Client{
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			select {
+			case <-first:
+				close(started)
+				select {
+				case <-release:
+				case <-r.Context().Done():
+					return nil, r.Context().Err()
+				}
+			default:
+			}
+			return transport.RoundTrip(r)
+		}),
+	})}
+	verifyCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	done := make(chan Status, 1)
+	go func() { done <- h.m.Verify(verifyCtx, "slash") }()
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("verification did not request a manifest")
+	}
+
+	if st := h.m.Verify(ctx, "slash"); st.Error != "already updating" {
+		t.Errorf("concurrent Verify = %+v", st)
+	}
+	if err := h.m.Update(ctx, "slash", false, nil); err == nil || err.Error() != "already updating" {
+		t.Errorf("concurrent Update = %v", err)
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("verification did not finish after cancellation")
+	}
+	if err := h.m.Update(ctx, "slash", false, nil); err != nil {
+		t.Fatalf("Update after Verify = %v", err)
+	}
+}
+
+func TestVerifyReleasesServerOnError(t *testing.T) {
+	for _, failure := range []string{"cache", "plan"} {
+		t.Run(failure, func(t *testing.T) {
+			h := newHarness(t)
+			ctx := context.Background()
+			if failure == "cache" {
+				dir, err := h.store.ServerDir("slash")
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Mkdir(filepath.Join(dir, "hashes.json.tmp"), 0o755); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				h.site.down = true
+			}
+			if st := h.m.Verify(ctx, "slash"); st.Error == "" {
+				t.Fatal("Verify succeeded despite the injected failure")
+			}
+			h.m.mu.Lock()
+			busy := h.m.busy["slash"]
+			h.m.mu.Unlock()
+			if busy {
+				t.Error("Verify left the server busy after an error")
+			}
+		})
 	}
 }
 

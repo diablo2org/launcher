@@ -267,7 +267,9 @@ launcher acts on beyond showing them.
 Each file's hash is remembered with its size and modification time, so
 unchanged files aren't rehashed on every start. A file modified in the last
 two seconds is always rehashed, since file times are too coarse to trust
-that soon.
+that soon. The player can also verify a server's files, which hashes every
+file again regardless, and then repairs any that differ the same way an
+update would. `once` files and custom components are never verified.
 
 Files in the server folder that no manifest lists are left alone, apart from
 component switching (section 5).

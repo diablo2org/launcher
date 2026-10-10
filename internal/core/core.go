@@ -40,7 +40,7 @@ type Manager struct {
 	entries map[string]*entry
 	// loaded is set once the listing has been read.
 	loaded bool
-	// busy stops two updates of the same server running at once.
+	// busy stops updates and verification of the same server running at once.
 	busy map[string]bool
 }
 
@@ -845,6 +845,34 @@ func (m *Manager) Status(ctx context.Context, id string) Status {
 		UpdateFiles: len(update.Actions) + len(removal.Actions),
 		UpdateBytes: update.Bytes,
 	}
+}
+
+// Verify checks every file in a server's folder against its manifests,
+// hashing each one again rather than trusting the remembered hashes, and
+// reports what an update would repair. Files the player owns ("once" files
+// and custom components) are left out, as they are for an update.
+func (m *Manager) Verify(ctx context.Context, id string) Status {
+	m.mu.Lock()
+	if m.busy[id] {
+		m.mu.Unlock()
+		return Status{Error: "already updating"}
+	}
+	m.busy[id] = true
+	m.mu.Unlock()
+
+	defer func() {
+		m.mu.Lock()
+		delete(m.busy, id)
+		m.mu.Unlock()
+	}()
+
+	// An emptied cache makes the plan hash every file; Status then saves the
+	// fresh hashes.
+	if err := m.store.WriteCache(id, "hashes.json", []byte("{}")); err != nil {
+		return Status{Error: err.Error()}
+	}
+
+	return m.Status(ctx, id)
 }
 
 // ErrNeedsCopy means the base archives can't be hard linked into the server
