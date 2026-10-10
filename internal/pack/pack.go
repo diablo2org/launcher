@@ -82,7 +82,7 @@ func matches(patterns []string, rel string) (bool, error) {
 // BuildManifest hashes every file under dir into a manifest.
 func BuildManifest(dir string, opts Options) (*spec.Manifest, error) {
 	base, err := url.Parse(strings.TrimSuffix(opts.BaseURL, "/") + "/")
-	if err != nil || (base.Scheme != "https" && base.Scheme != "http") {
+	if err != nil || base.Scheme != "https" || base.Hostname() == "" {
 		return nil, fmt.Errorf("base URL %q must be an https URL", opts.BaseURL)
 	}
 	if base.RawQuery != "" || base.ForceQuery || base.Fragment != "" {
@@ -198,6 +198,11 @@ func WriteManifest(m *spec.Manifest, file string) error {
 	return os.WriteFile(file, append(data, '\n'), 0o644)
 }
 
+// githubAssetHosts are where github.com redirects a release asset download.
+// The launcher checks every redirect against the profile's hosts, so a server
+// publishing its files as release assets has to allow these too.
+var githubAssetHosts = []string{"release-assets.githubusercontent.com", "objects.githubusercontent.com"}
+
 // InitOptions describe a new server, for InitProfile.
 type InitOptions struct {
 	ID          string
@@ -221,13 +226,18 @@ func InitProfile(opts InitOptions) ([]byte, error) {
 		version = "1.13c"
 	}
 
+	hosts := []string{strings.ToLower(u.Hostname())}
+	if hosts[0] == "github.com" {
+		hosts = append(hosts, githubAssetHosts...)
+	}
+
 	profile := map[string]any{
 		"schema":  1,
 		"id":      opts.ID,
 		"name":    opts.Name,
 		"summary": "",
 		"version": 1,
-		"hosts":   []string{strings.ToLower(u.Hostname())},
+		"hosts":   hosts,
 		"game": map[string]any{
 			"version": version, "expansion": true, "baseArchives": "link", "saves": "shared",
 		},
