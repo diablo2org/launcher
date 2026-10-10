@@ -80,6 +80,25 @@ Each entry takes:
 - `files`: the URL the files are published at, when that isn't the
   manifest's folder.
 
+A folder in `source` can also be `{ "folder": ..., "files": ... }`, which
+publishes that folder's files at their own URL rather than the entry's. Use
+it for files several manifests share, such as the base game files under
+every channel, so they're uploaded once:
+
+```json
+{
+  "profile": "myserver.json",
+  "manifests": [
+    { "channel": "live", "source": [{ "folder": "patches/base", "files": "https://files.myserver.net/base/" }, "patches/live"] },
+    { "channel": "beta", "source": [{ "folder": "patches/base", "files": "https://files.myserver.net/base/" }, "patches/beta"] }
+  ]
+}
+```
+
+Here both channels point at one copy of the base files under `base/`, and
+each channel's own files sit beside its manifest. A file a later folder
+replaces is published with that folder.
+
 Channels and versions the plan leaves out are listed, and their published
 manifests are left as they are. [`examples/slashdiablo/build.json`](../examples/slashdiablo/build.json)
 builds SlashDiablo's from its current patch folders.
