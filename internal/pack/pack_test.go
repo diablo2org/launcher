@@ -144,6 +144,25 @@ func TestInitProfile(t *testing.T) {
 		t.Errorf("hosts for a GitHub release = %v", p.Hosts)
 	}
 
+	data, err = InitProfile(InitOptions{
+		ID: "myserver", Name: "My Server", Gateway: "play.myserver.net",
+		ManifestURL: "https://files.myserver.net/live/manifest.json",
+		ReportURL:   "https://reports.myserver.net/v1/report",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err = spec.ParseProfile(data)
+	if err != nil {
+		t.Fatalf("starter profile is not valid: %v", err)
+	}
+	if p.Report.URL != "https://reports.myserver.net/v1/report" || strings.Join(p.Hosts, " ") != "files.myserver.net reports.myserver.net" {
+		t.Errorf("report %+v, hosts %v", p.Report, p.Hosts)
+	}
+
+	if _, err := InitProfile(InitOptions{ID: "ok", Name: "x", Gateway: "a.net", ManifestURL: "https://a.net/m.json", ReportURL: "http://a.net/r"}); err == nil {
+		t.Error("http report URL accepted")
+	}
 	if _, err := InitProfile(InitOptions{ID: "Bad Id", Name: "x", Gateway: "a.net", ManifestURL: "https://a.net/m.json"}); err == nil {
 		t.Error("invalid id accepted")
 	}

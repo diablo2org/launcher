@@ -1,5 +1,6 @@
 <script lang="ts">
   import { ServerService, SupportService } from "../../bindings/github.com/diablo2org/launcher/internal/app";
+  import type { SendResult } from "../../bindings/github.com/diablo2org/launcher/internal/app";
   import type { SettingValue } from "../../bindings/github.com/diablo2org/launcher/internal/core";
   import type { Item } from "../../bindings/github.com/diablo2org/launcher/internal/report";
   import { bytes, errorText } from "./format";
@@ -54,10 +55,36 @@
   // the player hasn't seen listed.
   let reportItems = $state<Item[] | null>(null);
   let reportSaved = $state("");
+  // A server with a report URL gets its reports sent rather than saved, and
+  // only its own files go in.
+  const sendsReports = $derived(!!profile?.report?.url);
+  let reportHost = $state("");
+  let reportMessage = $state("");
+  let reportContact = $state("");
+  let sending = $state(false);
+  let reportSent = $state<SendResult | null>(null);
 
   async function previewReport() {
     reportSaved = "";
-    await run(async () => (reportItems = await SupportService.ReportContents()));
+    reportSent = null;
+    await run(async () => {
+      const sr = sendsReports && info ? await SupportService.ServerReport(info.id) : null;
+      reportHost = sr?.host ?? "";
+      reportItems = sr ? sr.items : await SupportService.ReportContents();
+    });
+  }
+
+  async function sendReport() {
+    sending = true;
+    try {
+      await run(async () => {
+        reportSent = await SupportService.SendReport(info!.id, reportMessage, reportContact);
+        reportItems = null;
+        if (!reportSent.error) reportMessage = "";
+      });
+    } finally {
+      sending = false;
+    }
   }
 
   // Brings the list and its Save button into view when it opens.
@@ -221,7 +248,13 @@
         </div>
 
         <div class="flex items-center gap-4 border-b border-line py-4">
-          {@render row("Bug report", "Save the launcher's logs and Diablo II's crash logs as a zip, to attach when asking for help.", false)}
+          {@render row(
+            "Bug report",
+            sendsReports
+              ? `Send the launcher's logs and Diablo II's crash logs to ${profile?.name}, to help them fix a problem.`
+              : "Save the launcher's logs and Diablo II's crash logs as a zip, to attach when asking for help.",
+            false,
+          )}
           <button
             class="title flex items-center gap-2 rounded-[3px] border border-edge px-4 py-2 text-[12px] hover:border-muted"
             onclick={() => run(() => SupportService.OpenLogs())}
@@ -232,10 +265,17 @@
         </div>
         {#if reportItems}
           <div class="border-b border-line py-4 text-[11px]" use:reveal>
-            <p class="text-muted">
-              The report holds these files. Your Windows user folder is replaced with %USERPROFILE%. Nothing is sent anywhere: you choose where to save
-              it and who to give it to.
-            </p>
+            {#if reportHost}
+              <p class="text-muted">
+                The report holds these files and goes to {reportHost}. Your Windows user folder is replaced with %USERPROFILE%. Large files are cut to their
+                newest part to fit.
+              </p>
+            {:else}
+              <p class="text-muted">
+                The report holds these files. Your Windows user folder is replaced with %USERPROFILE%. Nothing is sent anywhere: you choose where to save
+                it and who to give it to.
+              </p>
+            {/if}
             <ul class="mt-3 flex flex-col gap-1">
               {#each reportItems as it (it.name)}
                 <li class="flex gap-4">
@@ -245,14 +285,60 @@
                 </li>
               {/each}
             </ul>
+            {#if reportHost}
+              <textarea
+                class="mt-4 h-20 w-full resize-none rounded-[3px] border border-edge bg-panel p-2 text-[12px]"
+                aria-label="What happened"
+                placeholder="What happened? What were you doing?"
+                maxlength="2000"
+                bind:value={reportMessage}
+              ></textarea>
+              <input
+                class="mt-2 h-8 w-64 rounded-[3px] border border-edge bg-panel px-2 text-[12px]"
+                aria-label="Contact"
+                placeholder="Your name on Discord (optional)"
+                maxlength="100"
+                bind:value={reportContact}
+              />
+            {/if}
             <div class="mt-4 flex gap-3">
-              <button class="title rounded-[3px] bg-accent px-4 py-2 text-[12px] !text-white hover:brightness-125" onclick={saveReport}>Save report</button>
+              {#if reportHost}
+                <button
+                  class="title rounded-[3px] bg-accent px-4 py-2 text-[12px] !text-white hover:brightness-125 disabled:opacity-45"
+                  disabled={sending}
+                  onclick={sendReport}>{sending ? "Sending…" : "Send report"}</button
+                >
+              {:else}
+                <button class="title rounded-[3px] bg-accent px-4 py-2 text-[12px] !text-white hover:brightness-125" onclick={saveReport}>Save report</button>
+              {/if}
               <button class="title rounded-[3px] border border-edge px-4 py-2 text-[12px] hover:border-muted" onclick={() => (reportItems = null)}>Cancel</button>
             </div>
           </div>
         {/if}
         {#if reportSaved}
           <p class="border-b border-line py-3 text-[11px] text-muted">Saved to {reportSaved}</p>
+        {/if}
+        {#if reportSent && !reportSent.error}
+          <p class="border-b border-line py-3 text-[11px] text-muted">
+            Sent{reportSent.id ? `. Your reference is ${reportSent.id}` : ""}.{reportSent.message ? ` ${reportSent.message}` : ""}
+          </p>
+        {:else if reportSent}
+          <div class="flex items-center gap-4 border-b border-line py-3 text-[11px]">
+            <p class="min-w-0 flex-1 text-date">
+              Couldn't send the report: {reportSent.error}
+              {#if reportSent.savedTo}
+                <span class="text-muted">It was saved to {reportSent.savedTo}, so you can send it to {profile?.name} yourself.</span>
+              {/if}
+            </p>
+            {#if reportSent.savedTo}
+              <button
+                class="title flex items-center gap-2 rounded-[3px] border border-edge px-4 py-2 text-[12px] hover:border-muted"
+                onclick={() => run(() => SupportService.ShowSavedReport(reportSent!.savedTo))}
+              >
+                <Icon name="folder" size={14} /> Show
+              </button>
+            {/if}
+          </div>
         {/if}
 
         <p class="py-4 text-[11px] text-muted">Launcher {app.version}</p>

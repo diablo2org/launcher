@@ -11,6 +11,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -206,6 +207,9 @@ type InitOptions struct {
 	GameVersion string
 	// ManifestURL is where the live channel's manifest.json is published.
 	ManifestURL string
+	// ReportURL, if set, is where the launcher sends bug reports. Its host
+	// joins the profile's hosts.
+	ReportURL string
 }
 
 // InitProfile writes a starter server profile: the minimum a server needs to
@@ -224,6 +228,16 @@ func InitProfile(opts InitOptions) ([]byte, error) {
 	hosts := []string{strings.ToLower(u.Hostname())}
 	if hosts[0] == "github.com" {
 		hosts = append(hosts, fetch.GitHubAssetHosts...)
+	}
+
+	if opts.ReportURL != "" {
+		r, err := url.Parse(opts.ReportURL)
+		if err != nil || r.Scheme != "https" || r.Hostname() == "" {
+			return nil, fmt.Errorf("report URL %q must be an https URL", opts.ReportURL)
+		}
+		if host := strings.ToLower(r.Hostname()); !slices.Contains(hosts, host) {
+			hosts = append(hosts, host)
+		}
 	}
 
 	profile := map[string]any{
@@ -247,6 +261,9 @@ func InitProfile(opts InitOptions) ([]byte, error) {
 			"allowedFlags": []string{"-w", "-3dfx", "-ns", "-skip", "-skiptobnet", "-nofixaspect"},
 			"maxInstances": 1,
 		},
+	}
+	if opts.ReportURL != "" {
+		profile["report"] = map[string]any{"url": opts.ReportURL}
 	}
 
 	data, err := json.MarshalIndent(profile, "", "  ")

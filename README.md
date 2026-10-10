@@ -96,7 +96,9 @@ Bug report shows players what a report holds, then saves it as a zip:
 those logs, `state.json`, the newest Diablo II crash logs (`D2*.txt`)
 from each server folder, and any files a server's profile asks for in
 `report.files`, with the user folder replaced by `%USERPROFILE%`.
-Nothing is uploaded.
+Nothing is uploaded, unless the current server's profile sets
+`report.url`: then the button sends a report holding only that server's
+files there, and saves it in `reports\` if it can't (SPEC 3.4).
 
 ### Layout
 

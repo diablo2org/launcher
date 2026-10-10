@@ -53,9 +53,10 @@ func main() {
 func usage() {
 	fmt.Fprint(os.Stderr, `d2pack gets a Diablo II server ready for the launcher.
 
-  d2pack init -id <id> -name <name> -gateway <host> -manifest <url>
+  d2pack init -id <id> -name <name> -gateway <host> -manifest <url> [-report <url>]
       Write <id>.json, a starter server profile. Add it to the launcher
-      repository's servers/ folder in a pull request.
+      repository's servers/ folder in a pull request. -report is where the
+      launcher sends players' bug reports (SPEC section 3.4).
 
   d2pack manifest -server <id> -version <v> -url <base url> [-once <pattern>] [-exclude <pattern>] [-only <pattern>] <folder>
       Write <folder>/manifest.json listing every file in <folder> with its
@@ -87,6 +88,7 @@ func initProfile(args []string) error {
 	gateway := fs.String("gateway", "", "Battle.net gateway host, e.g. play.slashdiablo.net")
 	manifestURL := fs.String("manifest", "", "https URL your live manifest.json will be published at")
 	game := fs.String("game", "1.13c", "game version: 1.13c, 1.13d or 1.14d")
+	reportURL := fs.String("report", "", "https URL that takes players' bug reports (optional)")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -101,7 +103,7 @@ func initProfile(args []string) error {
 	}
 
 	data, err := pack.InitProfile(pack.InitOptions{
-		ID: *id, Name: *name, Gateway: *gateway, GameVersion: *game, ManifestURL: *manifestURL,
+		ID: *id, Name: *name, Gateway: *gateway, GameVersion: *game, ManifestURL: *manifestURL, ReportURL: *reportURL,
 	})
 	if err != nil {
 		return err

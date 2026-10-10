@@ -184,6 +184,9 @@ can't be changed.
   is cut to its last 2 MB, and a server's patterns add at most 16 MB in all.
   Links are never followed out of the server folder. The player sees every
   file before saving a report.
+- **`report.url`**, **`report.maxBytes`**: where the launcher sends this
+  server's bug reports, and the largest upload it takes (default 8 MB, at
+  least 256 KB, at most 25 MB). The URL MUST be on one of `hosts`. See 3.4.
 - **`news`**: a [JSON Feed 1.1](https://www.jsonfeed.org/version/1.1/). See
   3.2.
 - **`ladder`**: a ladder document. See 3.3.
@@ -220,6 +223,55 @@ Items without a title are skipped.
 
 Both are fetched only from the profile's `hosts`, and hold nothing the
 launcher acts on beyond showing them.
+
+### 3.4 Bug reports
+
+Without `report.url`, Settings, Bug report saves a zip where the player
+chooses, holding the launcher's logs and `state.json`, the newest crash logs
+from every server folder, and each server's `report.files`.
+
+With `report.url`, the same button sends the report to that server instead,
+and the zip holds only what concerns it: the launcher's logs and `about.txt`,
+`state.json` with only that server's entry, and that server's crash logs and
+`report.files`. The player sees every file and the URL's host first, and
+writes what happened and, optionally, how to reach them.
+
+The launcher sends one `POST` to `report.url` as `multipart/form-data`:
+
+| Part | Content |
+|---|---|
+| `server` | The server id. |
+| `launcher` | The launcher's version. |
+| `message` | What the player wrote, at most 2000 characters. May be empty. |
+| `contact` | How to reach the player, at most 100 characters. May be empty. |
+| `report` | The zip, as `report.zip`, `application/zip`. |
+
+The whole upload fits in `report.maxBytes`: the launcher keeps less of the
+end of each file, then leaves files out, older launcher logs first. A
+redirect is refused, not followed, and the upload isn't retried.
+
+The server answers `200` with JSON; both fields are optional:
+
+```json
+{"id": "R-0412", "message": "Thanks, we'll look into it."}
+```
+
+`id` is a reference the player is shown to quote when asking about it (at
+most 64 characters), and `message` is shown beside it (at most 500). Any
+other status is a failure, and `{"error": "..."}` in the body, if present,
+is shown to the player. `413` and `429` are the expected ones for a report
+that is too large and a player sending too many.
+
+When a report can't be sent, the launcher saves it in `reports\` in its data
+folder, keeping the newest 10, and shows the player where, so they can send
+it by hand.
+
+The endpoint is the server's to run. It takes uploads from anyone, so it
+should limit how often one address can send and check the upload is a zip
+before passing it on, and it should keep any credential it forwards with,
+such as a Discord webhook URL, to itself: a profile is public.
+[`examples/report-relay`](../examples/report-relay) is one such endpoint, a
+Cloudflare Worker that posts reports to a Discord channel.
 
 ## 4. File manifest
 

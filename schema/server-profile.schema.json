@@ -321,6 +321,17 @@
           "items": {
             "$ref": "#/$defs/filePattern"
           }
+        },
+        "url": {
+          "description": "Where the launcher sends bug reports, on one of the profile's hosts. See SPEC section 3.4.",
+          "$ref": "#/$defs/httpsUrl"
+        },
+        "maxBytes": {
+          "description": "The largest report the url accepts. The launcher trims a report to fit.",
+          "type": "integer",
+          "minimum": 262144,
+          "maximum": 26214400,
+          "default": 8388608
         }
       }
     },

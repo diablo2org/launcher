@@ -95,7 +95,7 @@ func TestReadCappedKeepsTheEnd(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "big.log")
 	write(t, path, strings.Repeat("a", maxFile)+"newest")
 
-	data, err := readCapped(filepath.Dir(path), filepath.Base(path))
+	data, err := readCapped(filepath.Dir(path), filepath.Base(path), maxFile)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +170,7 @@ func TestCrashLogLinksIgnored(t *testing.T) {
 		}
 	}
 
-	if _, err := readCapped(dir, "D2260101.txt"); err == nil {
+	if _, err := readCapped(dir, "D2260101.txt", maxFile); err == nil {
 		t.Error("read followed a link out of its folder")
 	}
 }
@@ -293,5 +293,73 @@ func TestServerFilesStayInFolder(t *testing.T) {
 		if strings.HasPrefix(it.Name, "game/") {
 			t.Errorf("collected %s", it.Name)
 		}
+	}
+}
+
+func TestFit(t *testing.T) {
+	root := t.TempDir()
+	data := filepath.Join(root, "data")
+	base := filepath.Join(root, "Diablo II")
+	dir := install.ServerDir(base, "ok")
+
+	// Random-looking text, so the zip can't shrink it much.
+	noise := func(n int) string {
+		var b strings.Builder
+		x := uint32(1)
+		for b.Len() < n {
+			x = x*1664525 + 1013904223
+			fmt.Fprintf(&b, "%08x", x)
+		}
+		return b.String()[:n]
+	}
+	write(t, filepath.Join(data, "logs", "launcher.log"), noise(1<<20)+"newest launcher line")
+	write(t, filepath.Join(data, "logs", "launcher.1.log"), noise(1<<20))
+	write(t, filepath.Join(data, "state.json"), "{}")
+	write(t, filepath.Join(dir, "Mod_Debug.log"), noise(3<<20)+"newest mod line")
+	write(t, filepath.Join(dir, "Mod_Debug.w2.log"), noise(3<<20))
+
+	items := Collect(Input{DataDir: data, Base: base, Servers: []string{"ok"}, About: "about", Files: map[string][]string{"ok": {"Mod_Debug*.log"}}})
+
+	// Everything fits once each file is cut down.
+	zipped, kept, err := Fit(items, "", 2<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(zipped) > 2<<20 || len(kept) != len(items) {
+		t.Errorf("%d bytes, kept %d of %d", len(zipped), len(kept), len(items))
+	}
+
+	// Tighter, files are left out: the older launcher log first, and the
+	// launcher log, about.txt and state.json never.
+	zipped, kept, err = Fit(items, "", 100<<10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := map[string]bool{}
+	for _, it := range kept {
+		names[it.Name] = true
+	}
+	if len(zipped) > 100<<10 || names["logs/launcher.1.log"] || !names["logs/launcher.log"] || !names["about.txt"] || !names["state.json"] {
+		t.Errorf("%d bytes, kept %v", len(zipped), names)
+	}
+
+	z, err := zip.NewReader(bytes.NewReader(zipped), int64(len(zipped)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range z.File {
+		if f.Name != "logs/launcher.log" {
+			continue
+		}
+		r, _ := f.Open()
+		body, _ := io.ReadAll(r)
+		r.Close()
+		if !strings.HasSuffix(string(body), "newest launcher line") {
+			t.Error("a cut file lost its end")
+		}
+	}
+
+	if _, _, err := Fit(items, "", 1<<10); err == nil {
+		t.Error("fitted a report into 1 KB")
 	}
 }

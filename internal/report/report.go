@@ -1,11 +1,12 @@
 // Package report builds a bug report: a zip of the launcher's logs, crash
 // traces and state, with the game's own crash logs and any files a server
-// asks for, that a player can attach when asking for help. It is only ever saved where the player chooses;
-// nothing is sent anywhere.
+// asks for, that a player can attach when asking for help. This package only
+// builds the zip; sending one is up to the caller.
 package report
 
 import (
 	"archive/zip"
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -56,6 +57,9 @@ type Input struct {
 	// Home is replaced by %USERPROFILE% in every text file, so the report
 	// doesn't carry the player's Windows user name.
 	Home string
+	// State, when set, is the state.json the report holds instead of the
+	// file, such as one cut down to the server a report goes to.
+	State []byte
 }
 
 // Item is one file in a report.
@@ -93,7 +97,11 @@ func Collect(in Input) []Item {
 		add("logs/"+name, "Launcher log", filepath.Join(logDir, name))
 	}
 	add("logs/"+logs.Crash, "Launcher crashes", filepath.Join(logDir, logs.Crash))
-	add("state.json", "Your launcher settings and choices", filepath.Join(in.DataDir, "state.json"))
+	if in.State != nil {
+		items = append(items, Item{Name: "state.json", What: "Your launcher settings and choices", data: in.State, Size: int64(len(in.State))})
+	} else {
+		add("state.json", "Your launcher settings and choices", filepath.Join(in.DataDir, "state.json"))
+	}
 
 	if in.Base != "" {
 		ids := append([]string{}, in.Servers...)
@@ -282,13 +290,68 @@ func isGameCrashLog(name string) bool {
 // replaced; a file that can't be read is noted in its place rather than
 // failing the report.
 func Write(w io.Writer, items []Item, home string) error {
+	return writeZip(w, items, home, maxFile)
+}
+
+// minFile is the least Fit cuts a file to before it starts leaving files out.
+const minFile = 64 << 10
+
+// Fit writes the items as a zip of at most limit bytes. It first keeps less
+// of the end of each file, down to minFile, then leaves files out: older
+// launcher logs first, then from the end of the list. about.txt, state.json
+// and the current launcher log always stay. It returns the zip and the items
+// it holds.
+func Fit(items []Item, home string, limit int) ([]byte, []Item, error) {
+	kept := append([]Item{}, items...)
+	perFile := int64(maxFile)
+	for {
+		var buf bytes.Buffer
+		if err := writeZip(&buf, kept, home, perFile); err != nil {
+			return nil, nil, err
+		}
+		if buf.Len() <= limit {
+			return buf.Bytes(), kept, nil
+		}
+
+		if perFile > minFile {
+			perFile /= 2
+			continue
+		}
+
+		i := dropIndex(kept)
+		if i < 0 {
+			return nil, nil, fmt.Errorf("the report doesn't fit in %d bytes", limit)
+		}
+		kept = append(kept[:i], kept[i+1:]...)
+	}
+}
+
+// dropIndex picks the item Fit leaves out next, or -1 if none may go.
+func dropIndex(items []Item) int {
+	for i := len(items) - 1; i >= 0; i-- {
+		if strings.HasPrefix(items[i].Name, "logs/launcher.") && items[i].Name != "logs/"+logs.Current {
+			return i
+		}
+	}
+	for i := len(items) - 1; i >= 0; i-- {
+		switch items[i].Name {
+		case "about.txt", "state.json", "logs/" + logs.Current:
+		default:
+			return i
+		}
+	}
+
+	return -1
+}
+
+func writeZip(w io.Writer, items []Item, home string, perFile int64) error {
 	z := zip.NewWriter(w)
 
 	for _, it := range items {
 		data := it.data
 		if it.root != "" {
 			var err error
-			data, err = readCapped(it.root, it.rel)
+			data, err = readCapped(it.root, it.rel, perFile)
 			if err != nil {
 				data = []byte(fmt.Sprintf("couldn't read this file: %v\n", err))
 			}
@@ -310,10 +373,10 @@ func Write(w io.Writer, items []Item, home string) error {
 	return z.Close()
 }
 
-// readCapped reads the end of a file, up to maxFile: the newest part of a log
-// is what matters. It opens the file within root, so even if it has been
+// readCapped reads the end of a file, up to limit bytes: the newest part of a
+// log is what matters. It opens the file within root, so even if it has been
 // swapped for a link since it was listed, the read can't leave that folder.
-func readCapped(root, rel string) ([]byte, error) {
+func readCapped(root, rel string, limit int64) ([]byte, error) {
 	f, err := os.OpenInRoot(root, rel)
 	if err != nil {
 		return nil, err
@@ -324,13 +387,13 @@ func readCapped(root, rel string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if info.Size() > maxFile {
-		if _, err := f.Seek(info.Size()-maxFile, io.SeekStart); err != nil {
+	if info.Size() > limit {
+		if _, err := f.Seek(info.Size()-limit, io.SeekStart); err != nil {
 			return nil, err
 		}
 	}
 
-	return io.ReadAll(io.LimitReader(f, maxFile))
+	return io.ReadAll(io.LimitReader(f, limit))
 }
 
 // redact replaces the home folder, written either way round and as JSON

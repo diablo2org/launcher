@@ -1,0 +1,15 @@
+name = "myserver-reports"
+main = "worker.js"
+compatibility_date = "2025-06-01"
+
+[vars]
+SERVER_ID = "myserver"
+MAX_BYTES = "8388608"
+PER_HOUR = "3"
+
+# The per-hour limit. Create the namespace with
+#   npx wrangler kv namespace create LIMITS
+# and put its id here.
+[[kv_namespaces]]
+binding = "LIMITS"
+id = "<your namespace id>"
