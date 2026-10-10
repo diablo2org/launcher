@@ -6,6 +6,7 @@
   import Rail from "./lib/Rail.svelte";
   import SettingsModal from "./lib/SettingsModal.svelte";
   import TopBar from "./lib/TopBar.svelte";
+  import Welcome from "./lib/Welcome.svelte";
   import { app } from "./lib/state.svelte";
 
   app.load();
@@ -46,7 +47,9 @@
     </div>
   {/each}
 
-  <Rail />
+  {#if app.page !== "welcome"}
+    <Rail />
+  {/if}
 
   <!-- A server's accent only applies on its own pages; the catalog and tools keep the launcher's. -->
   <div
@@ -60,7 +63,9 @@
         <p class="mx-8 mt-4 rounded border border-bad/50 bg-panel/90 p-3 text-[12px] text-bad" role="alert">{app.error}</p>
       {/if}
 
-      {#if app.page === "catalog"}
+      {#if app.page === "welcome"}
+        <Welcome />
+      {:else if app.page === "catalog"}
         <Catalog />
       {:else if app.page === "checker"}
         <ProfileChecker />

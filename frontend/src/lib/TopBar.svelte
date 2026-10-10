@@ -38,6 +38,8 @@
     {#if community}
       {@render item("Community", false, () => Browser.OpenURL(community), true)}
     {/if}
+  {:else if app.page === "welcome"}
+    <span class="title text-[14px]">Getting started</span>
   {:else if app.page === "catalog"}
     <span class="title text-[14px]">All servers</span>
   {:else}

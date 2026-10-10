@@ -451,3 +451,63 @@ func TestMissingBaseArchive(t *testing.T) {
 		t.Error("reported as needing a copy")
 	}
 }
+
+func TestFirstRun(t *testing.T) {
+	h := newHarness(t)
+
+	if !h.m.FirstRun() {
+		t.Fatal("a new launcher isn't on its first run")
+	}
+
+	// Anyone with a pinned server has used the launcher before.
+	h.m.SetFavourite("a", true)
+	if h.m.FirstRun() {
+		t.Error("first run with a server pinned")
+	}
+	h.m.SetFavourite("a", false)
+
+	// More than can be pinned changes nothing.
+	if err := h.m.FinishWelcome([]string{"a", "b", "c", "d"}); !errors.Is(err, ErrTooManyFavourites) {
+		t.Errorf("four pins: %v", err)
+	}
+	if !h.m.FirstRun() || len(h.m.Favourites()) != 0 {
+		t.Error("a refused welcome changed the state")
+	}
+
+	if err := h.m.FinishWelcome([]string{"b", "a", "b"}); err != nil {
+		t.Fatal(err)
+	}
+	if h.m.FirstRun() {
+		t.Error("first run after the welcome")
+	}
+	if got := strings.Join(h.m.Favourites(), ","); got != "b,a" {
+		t.Errorf("favourites = %s, want the picks in order", got)
+	}
+
+	// Both are remembered.
+	m, err := New(h.store, DirListing(h.listing), launch.New(nil, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.FirstRun() || strings.Join(m.Favourites(), ",") != "b,a" {
+		t.Errorf("after a restart: first run %v, favourites %v", m.FirstRun(), m.Favourites())
+	}
+}
+
+func TestFinishWelcomeKeepsStateWhenSaveFails(t *testing.T) {
+	h := newHarness(t)
+
+	// A folder where state.json goes makes every save fail.
+	state := filepath.Join(h.store.Dir(), "state.json")
+	os.Remove(state)
+	if err := os.Mkdir(state, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := h.m.FinishWelcome([]string{"a"}); err == nil {
+		t.Fatal("save into a folder succeeded")
+	}
+	if !h.m.FirstRun() || len(h.m.Favourites()) != 0 {
+		t.Errorf("failed welcome left first run %v, favourites %v", h.m.FirstRun(), h.m.Favourites())
+	}
+}

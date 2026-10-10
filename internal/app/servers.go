@@ -45,6 +45,8 @@ type Overview struct {
 	Servers    []core.ServerInfo `json:"servers"`
 	Favourites []string          `json:"favourites"`
 	Error      string            `json:"error"`
+	// FirstRun asks the page to show the welcome screen.
+	FirstRun bool `json:"firstRun"`
 }
 
 // Overview loads the base install check and every server. On the first run it
@@ -56,7 +58,7 @@ func (s *ServerService) Overview(ctx context.Context) Overview {
 	s.m.ImportLegacy(ctx, core.LegacyConfigPath())
 	s.m.DetectBase()
 
-	o := Overview{Base: s.m.Base(), Favourites: s.m.Favourites(), Servers: []core.ServerInfo{}}
+	o := Overview{Base: s.m.Base(), Favourites: s.m.Favourites(), Servers: []core.ServerInfo{}, FirstRun: s.m.FirstRun()}
 	if err != nil {
 		o.Error = err.Error()
 	}
@@ -102,6 +104,12 @@ func (s *ServerService) ChooseBase(ctx context.Context) (Overview, error) {
 	}
 
 	return s.Overview(ctx), nil
+}
+
+// FinishWelcome pins the servers picked on the welcome screen and stops it
+// showing again.
+func (s *ServerService) FinishWelcome(pins []string) error {
+	return s.m.FinishWelcome(pins)
 }
 
 // SetFavourite pins or unpins a server.

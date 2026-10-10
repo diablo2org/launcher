@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	gosync "sync"
@@ -198,6 +199,45 @@ func (m *Manager) SetLaunchDelay(ms int) error {
 
 	m.state.LaunchDelayMs = ms
 	return m.save()
+}
+
+// FirstRun reports whether to show the welcome screen: the player hasn't
+// been through it, and has no servers pinned, as anyone who has used the
+// launcher, or the old SlashDiablo one, will have.
+func (m *Manager) FirstRun() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return !m.state.Welcomed && len(m.state.Favourites) == 0
+}
+
+// FinishWelcome pins the servers picked on the welcome screen and records
+// that the player has been through it, in one save, so a failure can't leave
+// pins without the welcome or the other way round. On failure nothing
+// changes.
+func (m *Manager) FinishWelcome(pins []string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	favs := append([]string{}, m.state.Favourites...)
+	for _, id := range pins {
+		if slices.Contains(favs, id) {
+			continue
+		}
+		if len(favs) >= MaxFavourites {
+			return ErrTooManyFavourites
+		}
+		favs = append(favs, id)
+	}
+
+	oldFavs, oldWelcomed := m.state.Favourites, m.state.Welcomed
+	m.state.Favourites, m.state.Welcomed = favs, true
+	if err := m.save(); err != nil {
+		m.state.Favourites, m.state.Welcomed = oldFavs, oldWelcomed
+		return err
+	}
+
+	return nil
 }
 
 // ServerInfo is a server as the catalog shows it.
