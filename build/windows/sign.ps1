@@ -50,11 +50,13 @@ if ($got -ne $ZipSHA256) {
 }
 
 $Tool = Join-Path $Temp ("CodeSignTool-" + [guid]::NewGuid())
-Expand-Archive $zip -DestinationPath $Tool
 $Jar = Join-Path $Tool "jar\code_sign_tool-$Version.jar"
 $Java = Join-Path $Tool "jdk-11.0.2\bin\java.exe"
 
 try {
+    # Inside the try, so a failed unpack doesn't leave half a folder behind.
+    Expand-Archive $zip -DestinationPath $Tool
+
     foreach ($p in $Path) {
         $file = (Resolve-Path $p).Path
 
