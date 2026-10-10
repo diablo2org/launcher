@@ -1,15 +1,18 @@
 package sync
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -27,15 +30,22 @@ type fixture struct {
 	failing map[string]int
 	// failed, when set, is told each time a 503 is sent.
 	failed chan string
+	// cut sends only this many bytes of a path, once, while claiming the
+	// whole file, then answers the next thenBusy requests for it with 503.
+	cut      map[string]int
+	thenBusy int
+	// ranges are the Range headers asked for, by path.
+	ranges map[string][]string
 }
 
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
 
-	f := &fixture{dir: t.TempDir(), served: map[string][]byte{}, hits: map[string]int{}, failing: map[string]int{}}
+	f := &fixture{dir: t.TempDir(), served: map[string][]byte{}, hits: map[string]int{}, failing: map[string]int{}, cut: map[string]int{}, ranges: map[string][]string{}}
 
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.hits[r.URL.Path]++
+		f.ranges[r.URL.Path] = append(f.ranges[r.URL.Path], r.Header.Get("Range"))
 		if f.failing[r.URL.Path] > 0 {
 			f.failing[r.URL.Path]--
 			http.Error(w, "busy", http.StatusServiceUnavailable)
@@ -49,7 +59,14 @@ func newFixture(t *testing.T) *fixture {
 			http.NotFound(w, r)
 			return
 		}
-		w.Write(body)
+		if n := f.cut[r.URL.Path]; n > 0 {
+			delete(f.cut, r.URL.Path)
+			f.failing[r.URL.Path] = f.thenBusy
+			w.Header().Set("Content-Length", fmt.Sprint(len(body)))
+			w.Write(body[:n])
+			return
+		}
+		http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(body))
 	}))
 	t.Cleanup(srv.Close)
 
@@ -299,6 +316,59 @@ func TestRetryStopsWhenCancelled(t *testing.T) {
 		}
 	case <-time.After(retryWait / 2):
 		t.Fatal("cancel didn't stop the retry wait")
+	}
+}
+
+// A download cut short carries on from where it stopped on the next try.
+func TestResumesOnRetry(t *testing.T) {
+	quickRetries(t)
+	f := newFixture(t)
+	big := strings.Repeat("patch_d2 ", 2000)
+	file := f.serve("Patch_D2.mpq", big, "")
+
+	f.cut["/Patch_D2.mpq"] = 6000
+	f.sync(t, &spec.Manifest{Files: []spec.File{file}}, nil)
+
+	if got := f.read(t, "Patch_D2.mpq"); got != big {
+		t.Error("file is wrong after resuming")
+	}
+	if r := f.ranges["/Patch_D2.mpq"]; strings.Join(r, ",") != ",bytes=6000-" {
+		t.Errorf("ranges = %q", r)
+	}
+}
+
+// A download cut short is carried on from by the next update, after one that
+// gave up.
+func TestResumesCutDownload(t *testing.T) {
+	quickRetries(t)
+	f := newFixture(t)
+	big := strings.Repeat("patch_d2 ", 2000)
+	file := f.serve("Patch_D2.mpq", big, "")
+	m := &spec.Manifest{Files: []spec.File{file}}
+
+	// Cut, then busy for every try left: this update fails.
+	f.cut["/Patch_D2.mpq"] = 6000
+	f.thenBusy = tries - 1
+	plan, _ := PlanManifest(f.dir, m, nil)
+	if err := Apply(context.Background(), f.client, f.dir, plan, nil, nil); err == nil {
+		t.Fatal("update succeeded against a busy server")
+	}
+	partial := filepath.Join(f.dir, "Patch_D2.mpq"+partialSuffix)
+	if info, err := os.Stat(partial); err != nil || info.Size() != 6000 {
+		t.Fatalf("partial = %v, %v", info, err)
+	}
+
+	// The next update asks for the rest only.
+	f.ranges = map[string][]string{}
+	f.sync(t, m, nil)
+	if got := f.read(t, "Patch_D2.mpq"); got != big {
+		t.Error("file is wrong after resuming")
+	}
+	if r := f.ranges["/Patch_D2.mpq"]; strings.Join(r, ",") != "bytes=6000-" {
+		t.Errorf("ranges = %q", r)
+	}
+	if _, err := os.Stat(partial); !os.IsNotExist(err) {
+		t.Error("partial left after the update")
 	}
 }
 

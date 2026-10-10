@@ -1,6 +1,7 @@
 package fetch
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -16,6 +17,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // server returns a test server plus a client allowed to reach it.
@@ -236,5 +238,163 @@ func TestHashFile(t *testing.T) {
 	n, sha, err := HashFile(path)
 	if err != nil || n != 3 || sha != "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad" {
 		t.Errorf("HashFile = %d, %s, %v", n, sha, err)
+	}
+}
+
+func TestResume(t *testing.T) {
+	body := []byte(strings.Repeat("0123456789", 1000))
+	sum := sha256.Sum256(body)
+	sha := hex.EncodeToString(sum[:])
+	size := int64(len(body))
+
+	// mode picks how the server behaves.
+	var mode string
+	var ranges []string
+	srv, c := server(t, func(w http.ResponseWriter, r *http.Request) {
+		ranges = append(ranges, r.Header.Get("Range"))
+		switch mode {
+		case "no ranges":
+			w.Write(body)
+		case "cut":
+			// Says the whole rest is coming, then stops at 6000 bytes.
+			w.Header().Set("Content-Length", fmt.Sprint(size))
+			w.Write(body[:6000])
+		case "wrong part":
+			w.Header().Set("Content-Range", fmt.Sprintf("bytes 0-%d/%d", size-1, size))
+			w.WriteHeader(http.StatusPartialContent)
+			w.Write(body)
+		default:
+			http.ServeContent(w, r, "f", time.Time{}, bytes.NewReader(body))
+		}
+	})
+	ctx := context.Background()
+	dir := t.TempDir()
+
+	run := func(t *testing.T, name, server string, partial []byte) (string, []string, int64) {
+		t.Helper()
+		mode, ranges = server, nil
+		dest := filepath.Join(dir, name)
+		if partial != nil {
+			os.WriteFile(dest, partial, 0o644)
+		}
+		var first int64 = -1
+		err := c.Resume(ctx, srv.URL+"/f", dest, size, sha, func(n int64) {
+			if first < 0 {
+				first = n
+			}
+		})
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if data, _ := os.ReadFile(dest); !bytes.Equal(data, body) {
+			t.Errorf("%s: file is wrong", name)
+		}
+		return dest, ranges, first
+	}
+
+	// Carries on from the partial, asking for only the rest, and counts the
+	// partial in the progress.
+	if _, r, first := run(t, "half", "", body[:4000]); strings.Join(r, ",") != "bytes=4000-" || first <= 4000 {
+		t.Errorf("half: ranges %q, first progress %d", r, first)
+	}
+
+	// A server that ignores ranges sends it all; that's used instead.
+	if _, r, _ := run(t, "ignored", "no ranges", body[:4000]); len(r) != 1 {
+		t.Errorf("ignored: ranges %q", r)
+	}
+
+	// A partial of some other version of the file fails the hash, and the
+	// download starts once more from nothing.
+	other := append([]byte("XXXX"), body[4:4000]...)
+	if _, r, _ := run(t, "stale", "", other); strings.Join(r, ",") != "bytes=4000-," {
+		t.Errorf("stale: ranges %q", r)
+	}
+
+	// A partial longer than the file, or a reply for the wrong part, is
+	// thrown away.
+	if _, r, _ := run(t, "long", "", append(append([]byte{}, body...), "extra"...)); strings.Join(r, ",") != "" {
+		t.Errorf("long: ranges %q", r)
+	}
+
+	// Already complete: nothing to fetch.
+	if _, r, _ := run(t, "complete", "", body); len(r) != 0 {
+		t.Errorf("complete: ranges %q", r)
+	}
+
+	// A download cut short keeps what arrived, and the next try carries on.
+	mode = "cut"
+	dest := filepath.Join(dir, "cut")
+	if err := c.Resume(ctx, srv.URL+"/f", dest, size, sha, nil); err == nil || !Retryable(err) {
+		t.Fatalf("cut: err = %v, Retryable = %v", err, Retryable(err))
+	}
+	if info, err := os.Stat(dest); err != nil || info.Size() != 6000 {
+		t.Fatalf("cut: partial %v, %v", info, err)
+	}
+	if _, r, _ := run(t, "cut", "", nil); strings.Join(r, ",") != "bytes=6000-" {
+		t.Errorf("cut, resumed: ranges %q", r)
+	}
+
+	// Wrong part sent for a resumed download: start again in full.
+	mode = "wrong part"
+	dest = filepath.Join(dir, "wrong")
+	os.WriteFile(dest, body[:4000], 0o644)
+	if err := c.Resume(ctx, srv.URL+"/f", dest, size, sha, nil); err == nil {
+		t.Error("wrong part: no error")
+	}
+	if _, err := os.Stat(dest); !os.IsNotExist(err) {
+		t.Error("wrong part: bad download left on disk")
+	}
+}
+
+// A partial at least as long as the server's file gets a 416 for its range,
+// so it isn't of that file: it goes, and the whole file is asked for.
+func TestResumeRangeNotSatisfiable(t *testing.T) {
+	body := []byte("the file, now")
+	var ranges []string
+	srv, c := server(t, func(w http.ResponseWriter, r *http.Request) {
+		ranges = append(ranges, r.Header.Get("Range"))
+		http.ServeContent(w, r, "f", time.Time{}, bytes.NewReader(body))
+	})
+
+	// The manifest says the file is longer than the server's copy, as when
+	// the server hasn't finished uploading a new version.
+	want := append(append([]byte{}, body...), " and more"...)
+	sum := sha256.Sum256(want)
+	dest := filepath.Join(t.TempDir(), "f")
+	os.WriteFile(dest, want[:len(body)+2], 0o644)
+
+	if err := c.Resume(context.Background(), srv.URL+"/f", dest, int64(len(want)), hex.EncodeToString(sum[:]), nil); err == nil {
+		t.Fatal("download of a file the server doesn't have succeeded")
+	}
+	if strings.Join(ranges, ",") != fmt.Sprintf("bytes=%d-,", len(body)+2) {
+		t.Errorf("ranges = %q, want the range then the whole file", ranges)
+	}
+	if _, err := os.Stat(dest); !os.IsNotExist(err) {
+		t.Error("partial of the wrong file kept")
+	}
+}
+
+// A link at the partial's name is replaced, never written through.
+func TestResumeReplacesLink(t *testing.T) {
+	body := []byte("the real file")
+	sum := sha256.Sum256(body)
+	srv, c := server(t, func(w http.ResponseWriter, r *http.Request) { w.Write(body) })
+
+	dir := t.TempDir()
+	target := filepath.Join(dir, "retail.mpq")
+	os.WriteFile(target, []byte("retail"), 0o644)
+	dest := filepath.Join(dir, "f.launcher-download")
+	if err := os.Symlink(target, dest); err != nil {
+		t.Skipf("can't make a symlink here: %v", err)
+	}
+
+	if err := c.Resume(context.Background(), srv.URL+"/f", dest, int64(len(body)), hex.EncodeToString(sum[:]), nil); err != nil {
+		t.Fatal(err)
+	}
+	if data, _ := os.ReadFile(target); string(data) != "retail" {
+		t.Errorf("wrote through the link: %q", data)
+	}
+	if info, _ := os.Lstat(dest); !info.Mode().IsRegular() {
+		t.Error("link still there")
 	}
 }
