@@ -46,6 +46,25 @@ func (SystemRegistry) SetGatewayList(values []string) error {
 	return k.SetStringsValue(gatewayValue, values)
 }
 
+// String reads a value under the game's own key; one not set is "".
+func (SystemRegistry) String(name string) (string, error) {
+	k, err := registry.OpenKey(registry.CURRENT_USER, diabloKey, registry.QUERY_VALUE)
+	if errors.Is(err, registry.ErrNotExist) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	defer k.Close()
+
+	value, _, err := k.GetStringValue(name)
+	if errors.Is(err, registry.ErrNotExist) {
+		return "", nil
+	}
+
+	return value, err
+}
+
 // SetString writes a value under the game's own key.
 func (SystemRegistry) SetString(name, value string) error {
 	k, _, err := registry.CreateKey(registry.CURRENT_USER, diabloKey, registry.SET_VALUE)

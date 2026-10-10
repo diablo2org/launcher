@@ -94,6 +94,7 @@ type fakeRegistry struct{ values map[string]string }
 
 func (f *fakeRegistry) GatewayList() ([]string, error)     { return nil, nil }
 func (f *fakeRegistry) SetGatewayList([]string) error      { return nil }
+func (f *fakeRegistry) String(name string) (string, error) { return f.values[name], nil }
 func (f *fakeRegistry) SetString(name, value string) error { f.values[name] = value; return nil }
 
 type harness struct {
