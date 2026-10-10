@@ -198,11 +198,6 @@ func WriteManifest(m *spec.Manifest, file string) error {
 	return os.WriteFile(file, append(data, '\n'), 0o644)
 }
 
-// githubAssetHosts are where github.com redirects a release asset download.
-// The launcher checks every redirect against the profile's hosts, so a server
-// publishing its files as release assets has to allow these too.
-var githubAssetHosts = []string{"release-assets.githubusercontent.com", "objects.githubusercontent.com"}
-
 // InitOptions describe a new server, for InitProfile.
 type InitOptions struct {
 	ID          string
@@ -228,7 +223,7 @@ func InitProfile(opts InitOptions) ([]byte, error) {
 
 	hosts := []string{strings.ToLower(u.Hostname())}
 	if hosts[0] == "github.com" {
-		hosts = append(hosts, githubAssetHosts...)
+		hosts = append(hosts, fetch.GitHubAssetHosts...)
 	}
 
 	profile := map[string]any{

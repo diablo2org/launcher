@@ -317,7 +317,7 @@ func (m *Manager) AddServer(ctx context.Context, profileURL string) (*spec.Profi
 		return nil, errors.New("the profile URL must start with https://")
 	}
 
-	data, err := m.client([]string{u.Hostname()}).Document(ctx, u.String())
+	data, err := m.client(profileHosts(u)).Document(ctx, u.String())
 	if err != nil {
 		return nil, err
 	}
@@ -373,6 +373,18 @@ func (m *Manager) RemoveServer(id string) error {
 	return m.save()
 }
 
+// profileHosts are the hosts a profile added by URL may be fetched from, before
+// its own hosts are known: the URL's host, plus GitHub's asset CDN when that
+// is github.com, which serves a release asset by redirecting there.
+func profileHosts(u *url.URL) []string {
+	host := strings.ToLower(u.Hostname())
+	if host == "github.com" {
+		return append([]string{host}, fetch.GitHubAssetHosts...)
+	}
+
+	return []string{host}
+}
+
 // client returns a fetch client limited to hosts.
 func (m *Manager) client(hosts []string) *fetch.Client {
 	return fetch.New(hosts, m.clientOpts...)
@@ -392,7 +404,7 @@ func (m *Manager) fetchAdded(ctx context.Context, id, rawURL string) (*spec.Prof
 		return nil, err
 	}
 
-	data, fetchErr := m.client([]string{u.Hostname()}).Document(ctx, rawURL)
+	data, fetchErr := m.client(profileHosts(u)).Document(ctx, rawURL)
 	if fetchErr != nil {
 		cached, err := m.store.ReadCache(id, "profile.json")
 		if err != nil || cached == nil {
