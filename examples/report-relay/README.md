@@ -7,8 +7,10 @@ stays in the Worker as a secret: anything in a profile is public, and a
 webhook URL there would let anyone post to the channel.
 
 What it checks: the request is a `POST` within `MAX_BYTES`, names this
-server, and carries a zip; one address sends at most `PER_HOUR` reports an
-hour. The player's text is quoted with mentions turned off, so it can't ping
+server, and carries a zip, counting the bytes as they arrive so a chunked
+upload can't get past `MAX_BYTES`; one address sends about `PER_HOUR`
+reports an hour. The count is approximate (KV is eventually consistent),
+and a KV failure lets a report through rather than refusing it. The player's text is quoted with mentions turned off, so it can't ping
 anyone.
 
 ## Set up

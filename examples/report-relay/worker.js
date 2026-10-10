@@ -23,18 +23,51 @@ function reference() {
   return "R-" + Array.from(bytes, (b) => alphabet[b % alphabet.length]).join("");
 }
 
-// One address's reports this hour. KV is eventually consistent, so a burst
-// can slip a report or two past the limit; that is fine for this.
+// One address's reports this hour. The count is approximate: KV is
+// eventually consistent and takes one write per key per second, so two
+// reports at once can both count as one. A KV failure never refuses a
+// report; the limit is there to stop floods, not to be exact.
 async function overLimit(env, request) {
   if (!env.LIMITS) return false;
 
   const ip = request.headers.get("cf-connecting-ip") || "unknown";
   const key = `ip:${ip}:${Math.floor(Date.now() / 3600000)}`;
-  const count = parseInt((await env.LIMITS.get(key)) || "0", 10);
-  if (count >= parseInt(env.PER_HOUR || "3", 10)) return true;
-
-  await env.LIMITS.put(key, String(count + 1), { expirationTtl: 3700 });
+  try {
+    const count = parseInt((await env.LIMITS.get(key)) || "0", 10);
+    if (count >= parseInt(env.PER_HOUR || "3", 10)) return true;
+    await env.LIMITS.put(key, String(count + 1), { expirationTtl: 3700 });
+  } catch (err) {
+    console.log(`rate limit not counted: ${err}`);
+  }
   return false;
+}
+
+// The request body, or null once it passes max bytes. Content-Length can be
+// missing, as with a chunked upload, so the bytes are counted as they arrive.
+async function readCapped(request, max) {
+  if (!request.body) return new Uint8Array(0);
+
+  const reader = request.body.getReader();
+  const chunks = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > max) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+
+  const body = new Uint8Array(total);
+  let at = 0;
+  for (const c of chunks) {
+    body.set(c, at);
+    at += c.byteLength;
+  }
+  return body;
 }
 
 // Keeps a player's text from pinging anyone or breaking out of its quote.
@@ -55,9 +88,13 @@ export default {
 
     if (await overLimit(env, request)) return refuse(429, "Too many reports from you in the last hour. Please try again later.");
 
+    const body = await readCapped(request, max);
+    if (body === null) return refuse(413, "The report is too large.");
+
     let form;
     try {
-      form = await request.formData();
+      const type = request.headers.get("content-type") || "";
+      form = await new Response(body, { headers: { "content-type": type } }).formData();
     } catch {
       return refuse(400, "The report couldn't be read.");
     }
