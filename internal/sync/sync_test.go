@@ -23,15 +23,22 @@ type fixture struct {
 	url    string
 	served map[string][]byte
 	hits   map[string]int
+	// failing answers a path with 503 this many more times.
+	failing map[string]int
 }
 
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
 
-	f := &fixture{dir: t.TempDir(), served: map[string][]byte{}, hits: map[string]int{}}
+	f := &fixture{dir: t.TempDir(), served: map[string][]byte{}, hits: map[string]int{}, failing: map[string]int{}}
 
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.hits[r.URL.Path]++
+		if f.failing[r.URL.Path] > 0 {
+			f.failing[r.URL.Path]--
+			http.Error(w, "busy", http.StatusServiceUnavailable)
+			return
+		}
 		body, ok := f.served[r.URL.Path]
 		if !ok {
 			http.NotFound(w, r)
@@ -212,6 +219,77 @@ func TestMirrorFallback(t *testing.T) {
 
 	if got := f.read(t, "Game.exe"); got != "from mirror" {
 		t.Errorf("Game.exe = %q", got)
+	}
+	if n := f.hits["/missing/Game.exe"]; n != 1 {
+		t.Errorf("a missing file was asked for %d times; a 404 isn't retried", n)
+	}
+}
+
+func quickRetries(t *testing.T) {
+	t.Helper()
+
+	old := retryWait
+	retryWait = time.Millisecond
+	t.Cleanup(func() { retryWait = old })
+}
+
+func TestRetriesBusyServer(t *testing.T) {
+	quickRetries(t)
+	f := newFixture(t)
+
+	file := f.serve("Game.exe", "after a wait", "")
+	f.failing["/Game.exe"] = tries - 1
+
+	f.sync(t, &spec.Manifest{Files: []spec.File{file}}, nil)
+
+	if got := f.read(t, "Game.exe"); got != "after a wait" {
+		t.Errorf("Game.exe = %q", got)
+	}
+	if n := f.hits["/Game.exe"]; n != tries {
+		t.Errorf("asked %d times, want %d", n, tries)
+	}
+}
+
+func TestRetriesThenNextMirror(t *testing.T) {
+	quickRetries(t)
+	f := newFixture(t)
+
+	file := f.serve("Game.exe", "from mirror", "")
+	f.served["/down/Game.exe"] = []byte("unused")
+	f.failing["/down/Game.exe"] = 100
+	file.URLs = append([]string{f.url + "/down/Game.exe"}, file.URLs...)
+
+	f.sync(t, &spec.Manifest{Files: []spec.File{file}}, nil)
+
+	if got := f.read(t, "Game.exe"); got != "from mirror" {
+		t.Errorf("Game.exe = %q", got)
+	}
+	if n := f.hits["/down/Game.exe"]; n != tries {
+		t.Errorf("failing mirror asked %d times, want %d", n, tries)
+	}
+}
+
+func TestRetryStopsWhenCancelled(t *testing.T) {
+	f := newFixture(t)
+
+	file := f.serve("Game.exe", "never", "")
+	f.failing["/Game.exe"] = 100
+
+	ctx, cancel := context.WithCancel(context.Background())
+	plan, _ := PlanManifest(f.dir, &spec.Manifest{Files: []spec.File{file}}, nil)
+
+	done := make(chan error, 1)
+	go func() { done <- Apply(ctx, f.client, f.dir, plan, nil, nil) }()
+	time.Sleep(100 * time.Millisecond)
+	cancel()
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Errorf("err = %v, want cancelled", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("cancel didn't stop the retry wait")
 	}
 }
 

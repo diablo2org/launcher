@@ -94,25 +94,57 @@ func New(hosts []string, opts ...Option) *Client {
 	return c
 }
 
+// ErrNotAllowed matches every error from Allowed, including a refused
+// redirect: the URL breaks the profile's rules, so trying again won't help.
+var ErrNotAllowed = errors.New("not allowed for this server")
+
+// refusal is an Allowed error. It keeps its own message and matches
+// ErrNotAllowed.
+type refusal string
+
+func (r refusal) Error() string      { return string(r) }
+func (refusal) Is(target error) bool { return target == ErrNotAllowed }
+
+// StatusError is a response other than 200 OK.
+type StatusError struct {
+	URL    string
+	Code   int
+	Status string
+}
+
+func (e *StatusError) Error() string { return e.URL + ": " + e.Status }
+
+// shown is a URL as it appears in an error: without its query and fragment,
+// which for a redirect to a CDN hold a long signed token.
+func shown(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL
+	}
+	u.RawQuery, u.ForceQuery, u.Fragment, u.RawFragment = "", false, "", ""
+
+	return u.Redacted()
+}
+
 // Allowed returns an error unless rawURL may be fetched by this client.
 func (c *Client) Allowed(rawURL string) error {
 	u, err := url.Parse(rawURL)
 	if err != nil {
-		return fmt.Errorf("bad URL %q: %w", rawURL, err)
+		return refusal(fmt.Sprintf("bad URL %q: %v", shown(rawURL), err))
 	}
 
 	if u.User != nil {
-		return fmt.Errorf("%s: URLs must not carry credentials", u.Redacted())
+		return refusal(fmt.Sprintf("%s: URLs must not carry credentials", shown(rawURL)))
 	}
 
 	host := strings.ToLower(u.Hostname())
 
 	if u.Scheme != "https" {
-		return fmt.Errorf("%s: only https is allowed", rawURL)
+		return refusal(fmt.Sprintf("%s: only https is allowed", shown(rawURL)))
 	}
 
 	if !c.hosts[host] {
-		return fmt.Errorf("%s: host %s is not allowed for this server", rawURL, host)
+		return refusal(fmt.Sprintf("%s: host %s is not allowed for this server", shown(rawURL), host))
 	}
 
 	return nil
@@ -131,15 +163,46 @@ func (c *Client) get(ctx context.Context, rawURL string) (*http.Response, error)
 
 	resp, err := c.http.Do(req)
 	if err != nil {
+		var ue *url.Error
+		if errors.As(err, &ue) {
+			ue.URL = shown(ue.URL)
+		}
 		return nil, err
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		resp.Body.Close()
-		return nil, fmt.Errorf("%s: %s", rawURL, resp.Status)
+		return nil, &StatusError{URL: shown(rawURL), Code: resp.StatusCode, Status: resp.Status}
 	}
 
 	return resp, nil
+}
+
+// Retryable reports whether a failed request is worth trying again on the
+// same URL: a network failure, a transfer cut short, or a server that is busy
+// or failing right now. A refused URL, a missing file, a certificate problem
+// or a file that doesn't match the manifest won't fix itself.
+func Retryable(err error) bool {
+	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, ErrNotAllowed) {
+		return false
+	}
+
+	var status *StatusError
+	if errors.As(err, &status) {
+		return status.Code >= 500 || status.Code == http.StatusRequestTimeout || status.Code == http.StatusTooManyRequests
+	}
+
+	var cert *tls.CertificateVerificationError
+	if errors.As(err, &cert) {
+		return false
+	}
+
+	if errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+
+	var netErr net.Error
+	return errors.As(err, &netErr)
 }
 
 // Document downloads a small document such as a profile or manifest.
@@ -152,11 +215,11 @@ func (c *Client) Document(ctx context.Context, rawURL string) ([]byte, error) {
 
 	data, err := io.ReadAll(io.LimitReader(resp.Body, MaxDocument+1))
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", rawURL, err)
+		return nil, fmt.Errorf("%s: %w", shown(rawURL), err)
 	}
 
 	if len(data) > MaxDocument {
-		return nil, fmt.Errorf("%s: larger than %d bytes", rawURL, MaxDocument)
+		return nil, fmt.Errorf("%s: larger than %d bytes", shown(rawURL), MaxDocument)
 	}
 
 	return data, nil
@@ -176,7 +239,7 @@ func (c *Client) File(ctx context.Context, rawURL, dest string, size int64, sha 
 	defer resp.Body.Close()
 
 	if resp.ContentLength >= 0 && resp.ContentLength != size {
-		return fmt.Errorf("%s: server reports %d bytes, manifest says %d", rawURL, resp.ContentLength, size)
+		return fmt.Errorf("%s: server reports %d bytes, manifest says %d", shown(rawURL), resp.ContentLength, size)
 	}
 
 	f, err := os.OpenFile(dest, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
@@ -199,15 +262,18 @@ func (c *Client) File(ctx context.Context, rawURL, dest string, size int64, sha 
 	// rather than silently truncated.
 	n, err := io.Copy(w, io.LimitReader(resp.Body, size+1))
 	if err != nil {
-		return fmt.Errorf("%s: %w", rawURL, err)
+		return fmt.Errorf("%s: %w", shown(rawURL), err)
 	}
 
+	if n < size {
+		return fmt.Errorf("%s: got %d bytes, manifest says %d: %w", shown(rawURL), n, size, io.ErrUnexpectedEOF)
+	}
 	if n != size {
-		return fmt.Errorf("%s: got %d bytes, manifest says %d", rawURL, n, size)
+		return fmt.Errorf("%s: got %d bytes, manifest says %d", shown(rawURL), n, size)
 	}
 
 	if got := hex.EncodeToString(h.Sum(nil)); got != sha {
-		return fmt.Errorf("%s: SHA-256 %s does not match the manifest", rawURL, got)
+		return fmt.Errorf("%s: SHA-256 %s does not match the manifest", shown(rawURL), got)
 	}
 
 	return nil
