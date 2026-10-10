@@ -99,7 +99,7 @@ func TestBuildManifestRejectsClashes(t *testing.T) {
 		t.Error("reserved file name accepted")
 	}
 
-	for _, base := range []string{"ftp://a.net", "http://a.net/live", "https:///live"} {
+	for _, base := range []string{"ftp://a.net", "http://a.net/live", "https:///live", "https://user:pw@a.net/live"} {
 		if _, err := BuildManifest(t.TempDir(), Options{BaseURL: base}); err == nil {
 			t.Errorf("base URL %s accepted", base)
 		}
