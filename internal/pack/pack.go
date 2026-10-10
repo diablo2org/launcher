@@ -82,7 +82,7 @@ func matches(patterns []string, rel string) (bool, error) {
 // BuildManifest hashes every file under dir into a manifest.
 func BuildManifest(dir string, opts Options) (*spec.Manifest, error) {
 	base, err := url.Parse(strings.TrimSuffix(opts.BaseURL, "/") + "/")
-	if err != nil || (base.Scheme != "https" && base.Scheme != "http") {
+	if err != nil || base.Scheme != "https" || base.Hostname() == "" || base.User != nil {
 		return nil, fmt.Errorf("base URL %q must be an https URL", opts.BaseURL)
 	}
 	if base.RawQuery != "" || base.ForceQuery || base.Fragment != "" {
@@ -221,13 +221,18 @@ func InitProfile(opts InitOptions) ([]byte, error) {
 		version = "1.13c"
 	}
 
+	hosts := []string{strings.ToLower(u.Hostname())}
+	if hosts[0] == "github.com" {
+		hosts = append(hosts, fetch.GitHubAssetHosts...)
+	}
+
 	profile := map[string]any{
 		"schema":  1,
 		"id":      opts.ID,
 		"name":    opts.Name,
 		"summary": "",
 		"version": 1,
-		"hosts":   []string{strings.ToLower(u.Hostname())},
+		"hosts":   hosts,
 		"game": map[string]any{
 			"version": version, "expansion": true, "baseArchives": "link", "saves": "shared",
 		},

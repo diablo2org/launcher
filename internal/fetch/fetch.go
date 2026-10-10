@@ -22,6 +22,11 @@ import (
 	"time"
 )
 
+// GitHubAssetHosts are where github.com redirects a release asset download.
+// Redirects are checked against the allowed hosts, so files published as
+// release assets need these allowed too.
+var GitHubAssetHosts = []string{"release-assets.githubusercontent.com", "objects.githubusercontent.com"}
+
 // MaxDocument is the largest profile, manifest or listing entry accepted.
 const MaxDocument = 4 << 20
 

@@ -155,6 +155,11 @@ can't be changed.
 - **`hosts`** (required): the only hosts the launcher will download files
   from for this server. Every URL in the profile and its manifests MUST be
   HTTPS on one of these hosts, except `links`, which open in the browser.
+  Redirects are checked against the same list. Files published as GitHub
+  release assets redirect from `github.com` to
+  `release-assets.githubusercontent.com` (formerly
+  `objects.githubusercontent.com`), so list those too; `d2pack init` does
+  when the manifest URL is on `github.com`.
 - **`game.version`**: `1.07`, `1.08`, `1.09b`, `1.09d`, `1.10f`, `1.11b`,
   `1.12a`, `1.13c`, `1.13d` or `1.14d`. Informational; used for display and
   for launcher features that only work on some versions. The subfolder
