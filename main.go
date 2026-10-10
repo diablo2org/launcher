@@ -35,7 +35,7 @@ var exampleProfile []byte
 const listingURL = "https://raw.githubusercontent.com/diablo2org/launcher/main/servers/index.json"
 
 // Development settings, read from the environment. None are set in a normal
-// install.
+// install, and release builds ignore all but envData (see app.DevEnv).
 const (
 	// envListing is a folder of listing entries to use instead of the
 	// published listing.
@@ -45,7 +45,8 @@ const (
 	// envUpdates is a server to check for launcher updates instead of
 	// GitHub; see updates.UseSource.
 	envUpdates = "LAUNCHER_UPDATES_URL"
-	// envData replaces the data folder, to keep test runs separate.
+	// envData replaces the data folder, to keep test runs separate. It only
+	// moves the launcher's own files, so release builds honour it too.
 	envData = "LAUNCHER_DATA_DIR"
 	// envDevTools opens WebView2's DevTools protocol on this port, so tests
 	// can drive the page.
@@ -79,7 +80,7 @@ func main() {
 	}
 
 	var clientOpts []fetch.Option
-	if ca := os.Getenv(envDevCA); ca != "" {
+	if ca := app.DevEnv(envDevCA); ca != "" {
 		trust, err := fetch.TrustCertificate(ca)
 		if err != nil {
 			log.Fatal(err)
@@ -92,7 +93,7 @@ func main() {
 		Client: fetch.New([]string{"raw.githubusercontent.com"}, clientOpts...),
 		Store:  st,
 	}
-	if dir := os.Getenv(envListing); dir != "" {
+	if dir := app.DevEnv(envListing); dir != "" {
 		listing = core.DirListing(dir)
 	}
 
@@ -173,7 +174,7 @@ func main() {
 // updatesClient fetches launcher releases from GitHub, or from the server in
 // LAUNCHER_UPDATES_URL.
 func updatesClient(opts []fetch.Option) *fetch.Client {
-	base := os.Getenv(envUpdates)
+	base := app.DevEnv(envUpdates)
 	if base == "" {
 		return fetch.New(updates.Hosts)
 	}
@@ -189,7 +190,7 @@ func updatesClient(opts []fetch.Option) *fetch.Client {
 
 func windowsOptions() application.WindowsOptions {
 	var o application.WindowsOptions
-	if v := os.Getenv(envDevTools); v != "" {
+	if v := app.DevEnv(envDevTools); v != "" {
 		if port, err := strconv.Atoi(v); err == nil && port >= 1 && port <= 65535 {
 			o.AdditionalBrowserArgs = []string{"--remote-debugging-port=" + strconv.Itoa(port)}
 		} else {

@@ -87,6 +87,14 @@ Battle.net registry values, as a real launch would.
 Setting `LAUNCHER_DEVTOOLS_PORT` opens WebView2's DevTools protocol on that
 port, so a script can drive and screenshot the page.
 
+These development settings (`LAUNCHER_LISTING_DIR`, `LAUNCHER_DEV_CA`,
+`LAUNCHER_UPDATES_URL` and `LAUNCHER_DEVTOOLS_PORT`) only work in untagged
+builds, such as `wails3 build` or CI's artifacts from main. A tagged release
+logs and ignores them, so nothing on a player's machine can point the
+launcher at another listing, trust another certificate or open its page to
+other programs. `LAUNCHER_DATA_DIR` works in both: it only moves the
+launcher's own folder.
+
 ### Logs and bug reports
 
 The launcher logs to `logs\launcher.log` in its data folder
