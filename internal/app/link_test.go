@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -161,5 +162,31 @@ func TestAddFromLink(t *testing.T) {
 
 	if _, err := h.s.AddFromLink(t.Context(), h.srv.URL+"/missing.json"); err == nil {
 		t.Error("a missing profile was added")
+	}
+}
+
+func TestHandleLinkQueues(t *testing.T) {
+	h := newLinkHarness(t)
+
+	// Two links during startup both wait, in order; a repeat isn't queued twice.
+	HandleLink(h.s, h.link("linked"), false)
+	HandleLink(h.s, h.link("linked"), false)
+	HandleLink(h.s, h.link("listed"), false)
+	for _, want := range []string{"linked", "listed"} {
+		req := h.s.PendingLink()
+		if req == nil || req.URL != h.srv.URL+"/"+want+".json" {
+			t.Fatalf("want %s, got %+v", want, req)
+		}
+	}
+	if req := h.s.PendingLink(); req != nil {
+		t.Errorf("extra link %+v", req)
+	}
+
+	// Past the cap the oldest go.
+	for i := 0; i < maxPendingLinks+2; i++ {
+		HandleLink(h.s, fmt.Sprintf("diablo2org://add?profile=https://example.net/%d.json", i), false)
+	}
+	if req := h.s.PendingLink(); req == nil || req.URL != "https://example.net/2.json" {
+		t.Errorf("oldest kept = %+v", req)
 	}
 }

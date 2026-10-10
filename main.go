@@ -219,7 +219,12 @@ func instanceID() string {
 	if abs, err := filepath.Abs(dir); err == nil {
 		dir = abs
 	}
-	sum := sha256.Sum256([]byte(strings.ToLower(dir)))
+	// Windows and macOS paths are case-insensitive; elsewhere /tmp/Game and
+	// /tmp/game are different folders.
+	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
+		dir = strings.ToLower(dir)
+	}
+	sum := sha256.Sum256([]byte(dir))
 
 	return id + "." + hex.EncodeToString(sum[:4])
 }

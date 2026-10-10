@@ -20,6 +20,10 @@ const LinkScheme = "diablo2org"
 // maxLink is the longest link accepted, the same as a profile's URLs.
 const maxLink = 2048
 
+// maxPendingLinks is how many links wait for the frontend; beyond it the
+// oldest is dropped, so a page can't pile up dialogs.
+const maxPendingLinks = 8
+
 // LinkArg returns the first command line argument that is one of the
 // launcher's links, or "". Windows passes a clicked link as an argument.
 func LinkArg(args []string) string {
@@ -63,10 +67,10 @@ func ParseAddLink(raw string) (string, error) {
 	return p.String(), nil
 }
 
-// pendingLink is the link the frontend hasn't taken yet.
-type pendingLink struct {
-	mu  sync.Mutex
-	req *LinkRequest
+// pendingLinks are the links the frontend hasn't taken yet, oldest first.
+type pendingLinks struct {
+	mu   sync.Mutex
+	reqs []LinkRequest
 }
 
 // LinkRequest is a link waiting for the player to agree to it.
@@ -80,9 +84,10 @@ type LinkRequest struct {
 }
 
 // HandleLink takes a link the launcher was started with, or sent while
-// running, and holds it until the frontend asks for it. running says the
+// running, and queues it until the frontend asks for it. running says the
 // window is up, to be told and brought to the front. An empty link is
-// ignored. It isn't a ServerService method so the frontend can't call it.
+// ignored, and a link the same as the last one queued isn't queued twice.
+// It isn't a ServerService method so the frontend can't call it.
 func HandleLink(s *ServerService, raw string, running bool) {
 	if raw == "" {
 		return
@@ -99,7 +104,12 @@ func HandleLink(s *ServerService, raw string, running bool) {
 	}
 
 	s.links.mu.Lock()
-	s.links.req = &req
+	if n := len(s.links.reqs); n == 0 || s.links.reqs[n-1] != req {
+		s.links.reqs = append(s.links.reqs, req)
+		if len(s.links.reqs) > maxPendingLinks {
+			s.links.reqs = s.links.reqs[1:]
+		}
+	}
 	s.links.mu.Unlock()
 
 	if !running {
@@ -113,14 +123,17 @@ func HandleLink(s *ServerService, raw string, running bool) {
 	}
 }
 
-// PendingLink returns the link waiting for the player, once, or nil.
+// PendingLink returns the oldest link waiting for the player, once, or nil.
 func (s *ServerService) PendingLink() *LinkRequest {
 	s.links.mu.Lock()
 	defer s.links.mu.Unlock()
 
-	req := s.links.req
-	s.links.req = nil
-	return req
+	if len(s.links.reqs) == 0 {
+		return nil
+	}
+	req := s.links.reqs[0]
+	s.links.reqs = s.links.reqs[1:]
+	return &req
 }
 
 // AddFromLink adds the server a link named, once the player has agreed, pins

@@ -44,8 +44,8 @@ type ServerService struct {
 	m    *core.Manager
 	host Host
 
-	// links holds a link until the frontend asks for it.
-	links pendingLink
+	// links hold links until the frontend asks for them.
+	links pendingLinks
 }
 
 // NewServerService wraps a manager for the frontend.

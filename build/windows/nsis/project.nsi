@@ -104,7 +104,9 @@ Section
     CreateShortCut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
 
     !insertmacro wails.associateFiles
-    !insertmacro wails.associateCustomProtocols
+    ; Not wails.associateCustomProtocols: its command leaves the executable's
+    ; path unquoted, which breaks under an install path with spaces.
+    !insertmacro CUSTOM_PROTOCOL_ASSOCIATE "diablo2org" "Diablo II server link" "$INSTDIR\${PRODUCT_EXECUTABLE},0" "$\"$INSTDIR\${PRODUCT_EXECUTABLE}$\" $\"%1$\""
     
     !insertmacro wails.writeUninstaller
 

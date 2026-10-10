@@ -181,12 +181,27 @@ class AppState {
     Events.On("link", () => this.checkLink());
   }
 
-  // Takes a link the launcher was started with or sent. It waits while the
-  // welcome screen is up, and is asked for again when that finishes.
-  async checkLink() {
-    if (!this.overview || this.page === "welcome") return;
+  private linkCheck: Promise<void> = Promise.resolve();
+
+  // Shows the next link the launcher was started with or sent. Checks run one
+  // after another, so an older answer can't replace a newer link; while a
+  // dialog is open, or the welcome screen is up, links wait in the backend.
+  checkLink(): Promise<void> {
+    this.linkCheck = this.linkCheck.then(() => this.takeLink()).catch(() => {});
+    return this.linkCheck;
+  }
+
+  private async takeLink() {
+    if (!this.overview || this.page === "welcome" || this.link) return;
     const req = await ServerService.PendingLink();
     if (req) this.link = req;
+  }
+
+  // Closes req's dialog if it is still the one shown, then shows the next.
+  closeLink(req: LinkRequest) {
+    if (this.link !== req) return;
+    this.link = null;
+    this.checkLink();
   }
 
   // Adds the server a link named, once the player has agreed; returns an
