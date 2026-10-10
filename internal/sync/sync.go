@@ -5,7 +5,9 @@
 // Files are never written in place. Each download goes to a temporary file
 // that is checked and then renamed over the old one, so an interrupted update
 // never leaves a half-written file, and a hard link in the folder (see
-// install) is replaced rather than written through.
+// install) is replaced rather than written through. A temporary file left by
+// an interrupted download is carried on from next time, rather than
+// downloaded again.
 package sync
 
 import (
@@ -266,6 +268,10 @@ func Apply(ctx context.Context, c *fetch.Client, dir string, plan *Plan, cache C
 	return nil
 }
 
+// partialSuffix names a download in progress, beside the file it will
+// replace.
+const partialSuffix = ".launcher-download"
+
 // tries is how many times one URL is tried, when its failures are worth
 // retrying, before moving on to the next mirror. The wait between tries
 // starts at retryWait and doubles.
@@ -275,24 +281,27 @@ var (
 )
 
 // download fetches a file to a temporary name beside its target, trying each
-// mirror in turn, then renames it into place.
+// mirror in turn, then renames it into place. What arrived of a download that
+// stopped part way, on an earlier try or an earlier run, is kept in the
+// temporary file and carried on from, from any mirror, since they all serve
+// the same bytes.
 func download(ctx context.Context, c *fetch.Client, path string, f spec.File, report func(int64)) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
 
-	tmp := path + ".launcher-download"
-	os.Remove(tmp)
+	tmp := path + partialSuffix
 
 	var errs []error
 	for _, u := range f.URLs {
 		wait := retryWait
 
 		for try := 1; ; try++ {
-			err := c.File(ctx, u, tmp, f.Size, f.SHA256, report)
+			err := c.Resume(ctx, u, tmp, f.Size, f.SHA256, report)
 			if err == nil {
+				// A file in use keeps the finished download, so trying
+				// again once the game is closed needs no download.
 				if err := os.Rename(tmp, path); err != nil {
-					os.Remove(tmp)
 					return inUse(f.Path, err)
 				}
 				return nil

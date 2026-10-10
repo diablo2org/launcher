@@ -260,7 +260,13 @@ launcher acts on beyond showing them.
    kept, so an installed server still plays offline.
 2. For each file, compare size and SHA-256 with what is on disk.
 3. Download each needed file to a temporary name in the same folder. Check
-   the HTTP status before writing, then check size and hash.
+   the HTTP status before writing, then check size and hash. A download cut
+   short, or stopped by the player, is kept and carried on from on the next
+   try or the next update, with an HTTP `Range` request; a host that doesn't
+   support ranges just sends the whole file again. Hosts SHOULD support
+   ranges, as most static hosts and CDNs do, so large files survive a
+   dropped connection. The size and hash checks cover the whole file,
+   however it arrived.
 4. Rename into place. A file in use (the game is running) stops the update
    with a clear message rather than failing half way.
 

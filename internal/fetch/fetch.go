@@ -178,6 +178,12 @@ func (c *Client) Allowed(rawURL string) error {
 }
 
 func (c *Client) get(ctx context.Context, rawURL string) (*http.Response, error) {
+	return c.getFrom(ctx, rawURL, 0)
+}
+
+// getFrom asks for rawURL from byte from onwards, when from is above zero.
+// The reply is then 200 with the whole file or 206 with the rest of it.
+func (c *Client) getFrom(ctx context.Context, rawURL string, from int64) (*http.Response, error) {
 	if err := c.Allowed(rawURL); err != nil {
 		return nil, err
 	}
@@ -187,6 +193,9 @@ func (c *Client) get(ctx context.Context, rawURL string) (*http.Response, error)
 		return nil, err
 	}
 	req.Header.Set("User-Agent", "diablo2org-launcher")
+	if from > 0 {
+		req.Header.Set("Range", fmt.Sprintf("bytes=%d-", from))
+	}
 
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -201,7 +210,7 @@ func (c *Client) get(ctx context.Context, rawURL string) (*http.Response, error)
 		return nil, err
 	}
 
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusOK && !(from > 0 && resp.StatusCode == http.StatusPartialContent) {
 		resp.Body.Close()
 		return nil, &StatusError{URL: shown(rawURL), Code: resp.StatusCode, Status: resp.Status}
 	}
@@ -308,6 +317,136 @@ func (c *Client) File(ctx context.Context, rawURL, dest string, size int64, sha 
 	}
 
 	return nil
+}
+
+// Resume downloads rawURL to dest like File, but carries on from a partial
+// download already at dest, such as one cut short or cancelled earlier, by
+// asking the server for only the rest. A transfer that fails part way leaves
+// what arrived at dest for the next try. The whole file must still be size
+// bytes with the given SHA-256: when it isn't, dest is removed, and if the
+// download had been resumed it starts once more from nothing, since the
+// partial may be of an older version of the file.
+func (c *Client) Resume(ctx context.Context, rawURL, dest string, size int64, sha string, progress Progress) (err error) {
+	// Nothing arrived: leave nothing behind.
+	defer func() {
+		if info, statErr := os.Lstat(dest); err != nil && statErr == nil && info.Size() == 0 {
+			os.Remove(dest)
+		}
+	}()
+
+	err = c.resume(ctx, rawURL, dest, size, sha, progress)
+
+	var bad badDownload
+	var status *StatusError
+	switch {
+	case errors.As(err, &bad):
+		os.Remove(dest)
+		if bad.resumed {
+			return c.resume(ctx, rawURL, dest, size, sha, progress)
+		}
+	case errors.As(err, &status) && status.Code == http.StatusRequestedRangeNotSatisfiable:
+		// The server's file is shorter than what's already here, so the
+		// partial isn't of it.
+		os.Remove(dest)
+		return c.resume(ctx, rawURL, dest, size, sha, progress)
+	}
+
+	return err
+}
+
+// badDownload is a download whose bytes are wrong, as opposed to one that
+// stopped early. resumed says whether some of it came from an earlier try.
+type badDownload struct {
+	err     error
+	resumed bool
+}
+
+func (b badDownload) Error() string { return b.err.Error() }
+func (b badDownload) Unwrap() error { return b.err }
+
+func (c *Client) resume(ctx context.Context, rawURL, dest string, size int64, sha string, progress Progress) error {
+	// Only a plain file the launcher left is carried on from; anything else
+	// at dest goes.
+	if info, err := os.Lstat(dest); err == nil && (!info.Mode().IsRegular() || info.Size() > size) {
+		if err := os.Remove(dest); err != nil {
+			return err
+		}
+	}
+
+	f, err := os.OpenFile(dest, os.O_RDWR|os.O_CREATE, 0o644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	// Hash what's already there, to carry the hash on from it.
+	h := sha256.New()
+	have, err := io.Copy(h, f)
+	if err != nil {
+		return err
+	}
+	resumed := have > 0
+
+	if have < size {
+		resp, err := c.getFrom(ctx, rawURL, have)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode == http.StatusPartialContent && !rangeFrom(resp.Header.Get("Content-Range"), have, size) {
+			return badDownload{fmt.Errorf("%s: server sent a different part of the file than asked for", shown(rawURL)), resumed}
+		}
+		if resp.StatusCode == http.StatusOK && have > 0 {
+			// The server sent the whole file instead: start again.
+			if err := f.Truncate(0); err != nil {
+				return err
+			}
+			if _, err := f.Seek(0, io.SeekStart); err != nil {
+				return err
+			}
+			h.Reset()
+			have, resumed = 0, false
+		}
+
+		if resp.ContentLength >= 0 && resp.ContentLength != size-have {
+			return badDownload{fmt.Errorf("%s: server reports %d bytes, manifest says %d", shown(rawURL), have+resp.ContentLength, size), resumed}
+		}
+
+		w := &counter{w: io.MultiWriter(f, h), n: have, progress: progress}
+		n, err := io.Copy(w, io.LimitReader(resp.Body, size-have+1))
+		if err != nil {
+			return fmt.Errorf("%s: %w", shown(rawURL), err)
+		}
+		have += n
+
+		if have < size {
+			return fmt.Errorf("%s: got %d bytes, manifest says %d: %w", shown(rawURL), have, size, io.ErrUnexpectedEOF)
+		}
+		if have != size {
+			return badDownload{fmt.Errorf("%s: got %d bytes, manifest says %d", shown(rawURL), have, size), resumed}
+		}
+	} else if progress != nil {
+		progress(have)
+	}
+
+	if got := hex.EncodeToString(h.Sum(nil)); got != sha {
+		return badDownload{fmt.Errorf("%s: SHA-256 %s does not match the manifest", shown(rawURL), got), resumed}
+	}
+
+	return f.Close()
+}
+
+// rangeFrom reports whether a Content-Range header is the part of a size-byte
+// file from byte from to the end.
+func rangeFrom(header string, from, size int64) bool {
+	var start, end int64
+	var total string
+	if _, err := fmt.Sscanf(header, "bytes %d-%d/%s", &start, &end, &total); err != nil {
+		return false
+	}
+
+	return start == from && end == size-1 && (total == "*" || total == fmt.Sprint(size))
 }
 
 type counter struct {
