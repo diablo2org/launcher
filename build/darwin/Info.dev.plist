@@ -18,6 +18,17 @@
 		<string>APPL</string>
 		<key>CFBundleShortVersionString</key>
 		<string>0.1.0</string>
+		<key>CFBundleURLTypes</key>
+		<array>
+			<dict>
+				<key>CFBundleURLName</key>
+				<string>wails.com.diablo2org</string>
+				<key>CFBundleURLSchemes</key>
+				<array>
+					<string>diablo2org</string>
+				</array>
+			</dict>
+		</array>
 		<key>CFBundleVersion</key>
 		<string>0.1.0</string>
 		<key>LSMinimumSystemVersion</key>

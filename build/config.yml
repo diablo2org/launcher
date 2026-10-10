@@ -67,6 +67,12 @@ dev_mode:
       type: primary
       exit_policy: shutdown
 
+# Custom URL protocols. diablo2org://add?profile=<https URL> adds a server;
+# see docs/SPEC.md section 9.1.
+protocols:
+  - scheme: diablo2org
+    description: Diablo II server link
+
 # File Associations
 # More information at: https://v3.wails.io/noit/done/yet
 fileAssociations:

@@ -10,4 +10,4 @@ Icon=launcher
 Categories=Utility;
 StartupWMClass=launcher
 
- 
+MimeType=x-scheme-handler/diablo2org; 

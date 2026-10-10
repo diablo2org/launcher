@@ -2,6 +2,7 @@ import { Events } from "@wailsio/runtime";
 import {
   ServerService,
   type Branding,
+  type LinkRequest,
   type Overview,
   type UpdateProgress,
 } from "../../bindings/github.com/diablo2org/launcher/internal/app";
@@ -164,6 +165,8 @@ class AppState {
   launcherUpdate = $state<{ done: number; total: number } | null>(null);
   updateError = $state("");
   error = $state("");
+  // A diablo2org:// link waiting for the player to agree to it.
+  link = $state<LinkRequest | null>(null);
 
   private data = new Map<string, ServerData>();
 
@@ -175,6 +178,43 @@ class AppState {
     Events.On("launcher:update", (ev: { data: { done: number; total: number } }) => {
       this.launcherUpdate = ev.data;
     });
+    Events.On("link", () => this.checkLink());
+  }
+
+  private linkCheck: Promise<void> = Promise.resolve();
+
+  // Shows the next link the launcher was started with or sent. Checks run one
+  // after another, so an older answer can't replace a newer link; while a
+  // dialog is open, or the welcome screen is up, links wait in the backend.
+  checkLink(): Promise<void> {
+    this.linkCheck = this.linkCheck.then(() => this.takeLink()).catch(() => {});
+    return this.linkCheck;
+  }
+
+  private async takeLink() {
+    if (!this.overview || this.page === "welcome" || this.link) return;
+    const req = await ServerService.PendingLink();
+    if (req) this.link = req;
+  }
+
+  // Closes req's dialog if it is still the one shown, then shows the next.
+  closeLink(req: LinkRequest) {
+    if (this.link !== req) return;
+    this.link = null;
+    this.checkLink();
+  }
+
+  // Adds the server a link named, once the player has agreed; returns an
+  // error message, or "" on success.
+  async addFromLink(profileURL: string): Promise<string> {
+    try {
+      const id = await ServerService.AddFromLink(profileURL);
+      this.overview = await ServerService.Overview();
+      this.select(id);
+      return "";
+    } catch (err) {
+      return errorText(err);
+    }
   }
 
   get servers(): ServerInfo[] {
@@ -235,6 +275,7 @@ class AppState {
     for (const id of this.favourites) this.warm(id);
 
     ServerService.CheckForUpdate().then((r) => (this.update = r ?? null));
+    this.checkLink();
   }
 
   private warmed = new Set<string>();
@@ -279,6 +320,7 @@ class AppState {
     // The reloaded list may not have it, if the listing failed to load.
     if (pins.length && this.info(pins[0])?.profile) this.select(pins[0]);
     else this.page = "catalog";
+    this.checkLink();
   }
 
   // Switch to the nth pinned server, for Ctrl+1..3.

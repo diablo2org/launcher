@@ -35,12 +35,17 @@ type Host struct {
 	SaveFile func(title, name string) (string, error)
 	// ShowFile shows a file, selected, in the file manager.
 	ShowFile func(path string) error
+	// Focus brings the launcher's window to the front.
+	Focus func()
 }
 
 // ServerService is how the frontend drives the launcher.
 type ServerService struct {
 	m    *core.Manager
 	host Host
+
+	// links hold links until the frontend asks for them.
+	links pendingLinks
 }
 
 // NewServerService wraps a manager for the frontend.

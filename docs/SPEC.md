@@ -561,6 +561,20 @@ profile. The profile is then hosted by the server itself, over HTTPS.
   the listed one is used.
 - Removing a server added by URL forgets it; its folder is left alone.
 
+A server can also offer a link that does the same in one click, from its
+website, Discord or a README:
+
+```
+diablo2org://add?profile=<https URL of the profile, URL-encoded>
+```
+
+The installer registers the `diablo2org` scheme. Clicking a link starts the
+launcher, or hands the link to the one already open and brings it to the
+front. The launcher asks the player first, showing the profile's host, and
+fetches nothing until they agree; the server is then added as above, opened
+and pinned if there is room. A link to a listed server opens that server.
+A link that isn't `add` with an https `profile` is refused with a message.
+
 ## 10. Launcher-side storage
 
 Not part of the server contract, recorded here so server staff know what the
