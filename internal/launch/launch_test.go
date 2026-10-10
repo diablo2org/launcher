@@ -228,12 +228,12 @@ func TestLaunchServerSetsItsOwnGateway(t *testing.T) {
 func TestIsolatedSavePath(t *testing.T) {
 	base := filepath.Join("C:", "Games", "Diablo II")
 	for path, want := range map[string]bool{
-		filepath.Join(base, "slashdiablo", "Save") + `\`: true,
-		filepath.Join(base, "SlashDiablo", "save"):       true,
-		filepath.Join(base, "Save"):                      false,
-		filepath.Join(base, "slashdiablo", "Saves"):      false,
-		filepath.Join("D:", "slashdiablo", "Save"):       false,
-		filepath.Join(base, "a b", "Save"):               false,
+		filepath.Join(base, "slashdiablo", "Save") + string(filepath.Separator): true,
+		filepath.Join(base, "SlashDiablo", "save"):                              true,
+		filepath.Join(base, "Save"):                                             false,
+		filepath.Join(base, "slashdiablo", "Saves"):                             false,
+		filepath.Join("D:", "slashdiablo", "Save"):                              false,
+		filepath.Join(base, "a b", "Save"):                                      false,
 	} {
 		if got := isolatedSavePath(base, path); got != want {
 			t.Errorf("isolatedSavePath(%q) = %v, want %v", path, got, want)
