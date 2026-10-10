@@ -34,74 +34,83 @@ foreach ($name in "ES_USERNAME", "ES_PASSWORD", "ES_CREDENTIAL_ID", "ES_TOTP_SEC
 }
 
 $Temp = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [IO.Path]::GetTempPath() }
-$Tool = Join-Path $Temp "CodeSignTool-$Version"
-$Jar = Join-Path $Tool "jar\code_sign_tool-$Version.jar"
-$Java = Join-Path $Tool "jdk-11.0.2\bin\java.exe"
 
-if (-not (Test-Path $Jar)) {
-    $zip = Join-Path $Temp "CodeSignTool-$Version.zip"
+# The download is kept between runs, but checked every time, and unpacked
+# into a new folder for this run only: anything an earlier build step left
+# in a tool folder is never run with the account's password.
+$zip = Join-Path $Temp "CodeSignTool-$Version.zip"
+$got = if (Test-Path $zip) { (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower() }
+if ($got -ne $ZipSHA256) {
     Invoke-WebRequest $ZipURL -OutFile $zip -UseBasicParsing
     $got = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
     if ($got -ne $ZipSHA256) {
         Remove-Item $zip
         throw "CodeSignTool download has SHA-256 $got, expected $ZipSHA256"
     }
-    Expand-Archive $zip -DestinationPath $Tool -Force
-    Remove-Item $zip
 }
 
-foreach ($p in $Path) {
-    $file = (Resolve-Path $p).Path
+$Tool = Join-Path $Temp ("CodeSignTool-" + [guid]::NewGuid())
+Expand-Archive $zip -DestinationPath $Tool
+$Jar = Join-Path $Tool "jar\code_sign_tool-$Version.jar"
+$Java = Join-Path $Tool "jdk-11.0.2\bin\java.exe"
 
-    # CodeSignTool goes by the file's extension, and NSIS hands over the
-    # uninstaller as a .tmp file, so anything else is signed as an .exe copy
-    # and copied back.
-    $work = $file
-    if ([IO.Path]::GetExtension($file) -notin ".exe", ".dll") {
-        $work = Join-Path $Temp ("sign-" + [guid]::NewGuid() + ".exe")
-        Copy-Item $file $work
+try {
+    foreach ($p in $Path) {
+        $file = (Resolve-Path $p).Path
+
+        # CodeSignTool goes by the file's extension, and NSIS hands over the
+        # uninstaller as a .tmp file, so anything else is signed as an .exe copy
+        # and copied back.
+        $work = $file
+        if ([IO.Path]::GetExtension($file) -notin ".exe", ".dll") {
+            $work = Join-Path $Temp ("sign-" + [guid]::NewGuid() + ".exe")
+            Copy-Item $file $work
+        }
+
+        # CodeSignTool can report a failure and still exit 0, so the signature on
+        # the file is what counts. eSigner may refuse a one-time code used moments
+        # before, by the previous file, so a failure is tried once more after the
+        # code has changed.
+        for ($try = 1; ; $try++) {
+            # It reads its settings from conf\ in the working folder.
+            Push-Location $Tool
+            try {
+                # Arguments go to java.exe directly, not through the .bat, so a
+                # password with characters cmd treats specially still arrives whole.
+                & $Java -jar $Jar sign `
+                    "-username=$env:ES_USERNAME" `
+                    "-password=$env:ES_PASSWORD" `
+                    "-credential_id=$env:ES_CREDENTIAL_ID" `
+                    "-totp_secret=$env:ES_TOTP_SECRET" `
+                    "-input_file_path=$work" `
+                    "-override=true"
+                $exit = $LASTEXITCODE
+            }
+            finally {
+                Pop-Location
+            }
+
+            $sig = Get-AuthenticodeSignature $work
+            if ($exit -eq 0 -and $sig.Status -eq "Valid" -and $sig.TimeStamperCertificate) {
+                break
+            }
+            if ($try -ge 2) {
+                throw "signing $file failed: CodeSignTool exited $exit, signature status $($sig.Status)$(if (-not $sig.TimeStamperCertificate) { ', no timestamp' })"
+            }
+            Write-Warning "signing $file didn't take (exit $exit, status $($sig.Status)); trying again with a new code"
+            Start-Sleep -Seconds 31
+        }
+
+        if ($work -ne $file) {
+            Copy-Item $work $file -Force
+            Remove-Item $work
+        }
+
+        Write-Host "Signed $file as $($sig.SignerCertificate.Subject), timestamped by $($sig.TimeStamperCertificate.Subject)"
     }
-
-    # CodeSignTool can report a failure and still exit 0, so the signature on
-    # the file is what counts. eSigner may refuse a one-time code used moments
-    # before, by the previous file, so a failure is tried once more after the
-    # code has changed.
-    for ($try = 1; ; $try++) {
-        # It reads its settings from conf\ in the working folder.
-        Push-Location $Tool
-        try {
-            # Arguments go to java.exe directly, not through the .bat, so a
-            # password with characters cmd treats specially still arrives whole.
-            & $Java -jar $Jar sign `
-                "-username=$env:ES_USERNAME" `
-                "-password=$env:ES_PASSWORD" `
-                "-credential_id=$env:ES_CREDENTIAL_ID" `
-                "-totp_secret=$env:ES_TOTP_SECRET" `
-                "-input_file_path=$work" `
-                "-override=true"
-            $exit = $LASTEXITCODE
-        }
-        finally {
-            Pop-Location
-        }
-
-        $sig = Get-AuthenticodeSignature $work
-        if ($exit -eq 0 -and $sig.Status -eq "Valid" -and $sig.TimeStamperCertificate) {
-            break
-        }
-        if ($try -ge 2) {
-            throw "signing $file failed: CodeSignTool exited $exit, signature status $($sig.Status)$(if (-not $sig.TimeStamperCertificate) { ', no timestamp' })"
-        }
-        Write-Warning "signing $file didn't take (exit $exit, status $($sig.Status)); trying again with a new code"
-        Start-Sleep -Seconds 31
-    }
-
-    if ($work -ne $file) {
-        Copy-Item $work $file -Force
-        Remove-Item $work
-    }
-
-    Write-Host "Signed $file as $($sig.SignerCertificate.Subject), timestamped by $($sig.TimeStamperCertificate.Subject)"
+}
+finally {
+    Remove-Item $Tool -Recurse -Force -ErrorAction SilentlyContinue
 }
 
 # NSIS checks the exit code of the command that calls this.

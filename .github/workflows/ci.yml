@@ -20,7 +20,8 @@ jobs:
       # SSL.com's eSigner; see build/windows/sign.ps1. Each signing counts
       # against the eSigner plan, so other builds aren't. The account's
       # secrets only reach the steps that sign, and only when this is true.
-      SIGN: ${{ github.ref_type == 'tag' }}
+      # A fork's tags build unsigned: it has no eSigner account.
+      SIGN: ${{ github.ref_type == 'tag' && github.repository == 'diablo2org/launcher' }}
     steps:
       - uses: actions/checkout@v4
 
