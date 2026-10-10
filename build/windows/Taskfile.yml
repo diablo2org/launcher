@@ -57,7 +57,14 @@ tasks:
       - cmd: rm -f *.syso
         platforms: [linux, darwin]
     vars:
-      BUILD_FLAGS: '{{if eq .DEV "true"}}{{if or .EXTRA_TAGS (eq .OBFUSCATED "true")}}-tags {{if eq .OBFUSCATED "true"}}wails_obfuscated{{if .EXTRA_TAGS}},{{end}}{{end}}{{.EXTRA_TAGS}} {{end}}-buildvcs=false -gcflags=all="-l"{{else}}-tags production{{if eq .OBFUSCATED "true"}},wails_obfuscated{{end}}{{if .EXTRA_TAGS}},{{.EXTRA_TAGS}}{{end}} -trimpath -buildvcs=false -ldflags="-w -s -H windowsgui{{if .VERSION}} -X github.com/diablo2org/launcher/internal/app.Version={{.VERSION}}{{end}}"{{end}}'
+      # VERSION comes from the release tag. It goes into shell commands, so
+      # only SAFE_VERSION is used there: VERSION when it is a SemVer tag such
+      # as v1.2.3, whose characters are all shell-safe, else empty.
+      # generate:syso, which every build runs first, fails the build when
+      # VERSION is set but isn't one. It's worked out per task because
+      # top-level vars are set before VERSION is.
+      SAFE_VERSION: &safe_version '{{if .VERSION}}{{if regexMatch `^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$` .VERSION}}{{.VERSION}}{{end}}{{end}}'
+      BUILD_FLAGS: '{{if eq .DEV "true"}}{{if or .EXTRA_TAGS (eq .OBFUSCATED "true")}}-tags {{if eq .OBFUSCATED "true"}}wails_obfuscated{{if .EXTRA_TAGS}},{{end}}{{end}}{{.EXTRA_TAGS}} {{end}}-buildvcs=false -gcflags=all="-l"{{else}}-tags production{{if eq .OBFUSCATED "true"}},wails_obfuscated{{end}}{{if .EXTRA_TAGS}},{{.EXTRA_TAGS}}{{end}} -trimpath -buildvcs=false -ldflags="-w -s -H windowsgui{{if .SAFE_VERSION}} -X github.com/diablo2org/launcher/internal/app.Version={{.SAFE_VERSION}}{{end}}"{{end}}'
     env:
       GOOS: windows
       CGO_ENABLED: '{{.CGO_ENABLED | default "0"}}'
@@ -107,10 +114,17 @@ tasks:
   generate:syso:
     summary: Generates Windows `.syso` file
     dir: build
+    preconditions:
+      - sh: '{{if and .VERSION (not .SAFE_VERSION)}}exit 1{{else}}exit 0{{end}}'
+        msg: "VERSION must be a release tag such as v1.2.3 or v1.2.3-beta.1"
     cmds:
-      - wails3 generate syso -arch {{.ARCH}} -icon windows/icon.ico -manifest windows/wails.exe.manifest -info windows/info.json -out ../wails_windows_{{.ARCH}}.syso
+      # A tagged build stamps its version into a copy of info.json, so the
+      # exe's file properties show it.
+      - '{{if .SAFE_VERSION}}go run ./windows/stampinfo -in windows/info.json -out windows/info.stamped.json -version {{.SAFE_VERSION}}{{else}}echo Untagged build, version from info.json{{end}}'
+      - wails3 generate syso -arch {{.ARCH}} -icon windows/icon.ico -manifest windows/wails.exe.manifest -info windows/{{if .SAFE_VERSION}}info.stamped.json{{else}}info.json{{end}} -out ../wails_windows_{{.ARCH}}.syso
     vars:
       ARCH: '{{.ARCH | default ARCH}}'
+      SAFE_VERSION: *safe_version
 
   create:nsis:installer:
     summary: Creates an NSIS installer
@@ -125,14 +139,19 @@ tasks:
       - wails3 generate webview2bootstrapper -dir "{{.ROOT_DIR}}/build/windows/nsis"
       - |
         {{if eq OS "windows"}}
-        makensis {{if eq .INSTALL_SCOPE "user"}}-DWAILS_INSTALL_SCOPE=user -DREQUEST_EXECUTION_LEVEL=user {{end}}-DARG_WAILS_{{.ARG_FLAG}}_BINARY="{{.ROOT_DIR}}\{{.BIN_DIR}}\{{.APP_NAME}}.exe" project.nsi
+        makensis {{if eq .INSTALL_SCOPE "user"}}-DWAILS_INSTALL_SCOPE=user -DREQUEST_EXECUTION_LEVEL=user {{end}}{{.NSIS_VERSION}}-DARG_WAILS_{{.ARG_FLAG}}_BINARY="{{.ROOT_DIR}}\{{.BIN_DIR}}\{{.APP_NAME}}.exe" project.nsi
         {{else}}
-        makensis {{if eq .INSTALL_SCOPE "user"}}-DWAILS_INSTALL_SCOPE=user -DREQUEST_EXECUTION_LEVEL=user {{end}}-DARG_WAILS_{{.ARG_FLAG}}_BINARY="{{.ROOT_DIR}}/{{.BIN_DIR}}/{{.APP_NAME}}.exe" project.nsi
+        makensis {{if eq .INSTALL_SCOPE "user"}}-DWAILS_INSTALL_SCOPE=user -DREQUEST_EXECUTION_LEVEL=user {{end}}{{.NSIS_VERSION}}-DARG_WAILS_{{.ARG_FLAG}}_BINARY="{{.ROOT_DIR}}/{{.BIN_DIR}}/{{.APP_NAME}}.exe" project.nsi
         {{end}}
     vars:
       ARCH: '{{.ARCH | default ARCH}}'
       ARG_FLAG: '{{if eq .ARCH "amd64"}}AMD64{{else}}ARM64{{end}}'
       INSTALL_SCOPE: '{{.INSTALL_SCOPE | default "machine"}}'
+      SAFE_VERSION: *safe_version
+      # A tagged build's installer carries its version: in its own file
+      # properties and as the DisplayVersion in Installed apps. Windows'
+      # numeric fields get 1.2.3 of v1.2.3-beta.1; the text fields get it all.
+      NSIS_VERSION: '{{if .SAFE_VERSION}}-DINFO_PRODUCTVERSION={{regexReplaceAll "[-+].*$" (trimPrefix "v" .SAFE_VERSION) ""}} -DINFO_PRODUCTVERSION_TEXT={{trimPrefix "v" .SAFE_VERSION}} {{end}}'
 
   create:msix:package:
     summary: Creates an MSIX package
