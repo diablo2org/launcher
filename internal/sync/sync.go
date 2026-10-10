@@ -266,6 +266,14 @@ func Apply(ctx context.Context, c *fetch.Client, dir string, plan *Plan, cache C
 	return nil
 }
 
+// tries is how many times one URL is tried, when its failures are worth
+// retrying, before moving on to the next mirror. The wait between tries
+// starts at retryWait and doubles.
+var (
+	tries     = 3
+	retryWait = time.Second
+)
+
 // download fetches a file to a temporary name beside its target, trying each
 // mirror in turn, then renames it into place.
 func download(ctx context.Context, c *fetch.Client, path string, f spec.File, report func(int64)) error {
@@ -278,22 +286,54 @@ func download(ctx context.Context, c *fetch.Client, path string, f spec.File, re
 
 	var errs []error
 	for _, u := range f.URLs {
-		err := c.File(ctx, u, tmp, f.Size, f.SHA256, report)
-		if err == nil {
-			if err := os.Rename(tmp, path); err != nil {
-				os.Remove(tmp)
-				return inUse(f.Path, err)
+		wait := retryWait
+
+		for try := 1; ; try++ {
+			err := c.File(ctx, u, tmp, f.Size, f.SHA256, report)
+			if err == nil {
+				if err := os.Rename(tmp, path); err != nil {
+					os.Remove(tmp)
+					return inUse(f.Path, err)
+				}
+				return nil
 			}
-			return nil
+
+			if try == tries || !fetch.Retryable(err) || ctx.Err() != nil {
+				errs = append(errs, err)
+				break
+			}
+
+			if err := sleep(ctx, wait); err != nil {
+				errs = append(errs, err)
+				break
+			}
+			wait *= 2
 		}
 
-		errs = append(errs, err)
 		if ctx.Err() != nil {
 			break
 		}
 	}
 
-	return fmt.Errorf("%s: %w", f.Path, errors.Join(errs...))
+	// Stopped by the player: say so, rather than only the last server error.
+	joined := errors.Join(errs...)
+	if err := ctx.Err(); err != nil && !errors.Is(joined, err) {
+		joined = errors.Join(err, joined)
+	}
+
+	return fmt.Errorf("%s: %w", f.Path, joined)
+}
+
+func sleep(ctx context.Context, d time.Duration) error {
+	t := time.NewTimer(d)
+	defer t.Stop()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-t.C:
+		return nil
+	}
 }
 
 func inUse(rel string, err error) error {

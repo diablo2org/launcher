@@ -16,7 +16,7 @@ import type {
 import type { Release } from "../../bindings/github.com/diablo2org/launcher/internal/updates";
 import { errorText } from "./format";
 
-export type Page = "launch" | "ladder" | "catalog" | "checker";
+export type Page = "welcome" | "launch" | "ladder" | "catalog" | "checker";
 
 // The last server shown is a convenience for this machine only, so it lives
 // in the webview's storage, which can be unavailable.
@@ -196,7 +196,9 @@ class AppState {
       return;
     }
 
-    if (this.selected === "" || !this.info(this.selected)) {
+    if (this.overview.firstRun) {
+      this.page = "welcome";
+    } else if (this.selected === "" || !this.info(this.selected)) {
       // Reopen on the server used last, else the first pinned one.
       const last = remembered();
       const first = last && this.info(last)?.profile ? last : this.favourites[0];
@@ -228,7 +230,7 @@ class AppState {
   select(id: string) {
     this.selected = id;
     remember(id);
-    if (this.page === "catalog" || this.page === "checker") this.page = "launch";
+    if (this.page !== "launch" && this.page !== "ladder") this.page = "launch";
 
     const d = this.server(id);
     if (!this.warmed.has(id)) {
@@ -237,6 +239,24 @@ class AppState {
       // Already shown once: refresh quietly behind the cached view.
       d.refresh();
     }
+  }
+
+  // Pins the servers picked on the welcome screen and opens the first, or the
+  // catalog when none were picked.
+  async finishWelcome(pins: string[]) {
+    try {
+      await ServerService.FinishWelcome(pins);
+      this.overview = await ServerService.Overview();
+      this.error = "";
+    } catch (err) {
+      this.error = errorText(err);
+      return;
+    }
+
+    for (const id of this.favourites) this.warm(id);
+    // The reloaded list may not have it, if the listing failed to load.
+    if (pins.length && this.info(pins[0])?.profile) this.select(pins[0]);
+    else this.page = "catalog";
   }
 
   // Switch to the nth pinned server, for Ctrl+1..3.

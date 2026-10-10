@@ -12,6 +12,7 @@ type SystemRegistry struct{}
 
 func (SystemRegistry) GatewayList() ([]string, error) { return nil, errUnsupported }
 func (SystemRegistry) SetGatewayList([]string) error  { return errUnsupported }
+func (SystemRegistry) String(string) (string, error)  { return "", errUnsupported }
 func (SystemRegistry) SetString(string, string) error { return errUnsupported }
 
 // StartProcess is not supported outside Windows yet.

@@ -299,6 +299,10 @@
           "minimum": 1,
           "maximum": 16,
           "default": 1
+        },
+        "setGateways": {
+          "type": "boolean",
+          "default": true
         }
       }
     },

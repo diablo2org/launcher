@@ -11,6 +11,25 @@
   });
 
   const onServer = $derived(app.page === "launch" || app.page === "ladder");
+
+  // Kept in step however the window changes: this button, double-clicking
+  // the bar, snapping, or Windows+Up.
+  // Replies can arrive out of order, so only the newest request's counts.
+  let maximised = $state(false);
+  let latest = 0;
+  async function checkMaximised() {
+    const asked = ++latest;
+    const m = await Window.IsMaximised();
+    if (asked === latest) maximised = m;
+  }
+  checkMaximised();
+
+  // Wails doesn't always report a maximise as a page resize, so check after
+  // toggling too.
+  async function toggleMaximised() {
+    await Window.ToggleMaximise();
+    await checkMaximised();
+  }
 </script>
 
 {#snippet item(label: string, active: boolean, onclick: () => void, external = false)}
@@ -29,6 +48,8 @@
   </button>
 {/snippet}
 
+<svelte:window onresize={checkMaximised} />
+
 <header class="drag flex h-20 shrink-0 items-center gap-10 border-b border-line pr-3 pl-8">
   {#if onServer}
     {@render item("Launch", app.page === "launch", () => (app.page = "launch"))}
@@ -38,6 +59,8 @@
     {#if community}
       {@render item("Community", false, () => Browser.OpenURL(community), true)}
     {/if}
+  {:else if app.page === "welcome"}
+    <span class="title text-[14px]">Getting started</span>
   {:else if app.page === "catalog"}
     <span class="title text-[14px]">All servers</span>
   {:else}
@@ -58,6 +81,13 @@
   <div class="no-drag ml-2 flex self-start pt-1">
     <button class="rounded p-2 text-muted hover:text-title" aria-label="Minimise" onclick={() => Window.Minimise()}>
       <Icon name="min" size={16} />
+    </button>
+    <button
+      class="rounded p-2 text-muted hover:text-title"
+      aria-label={maximised ? "Restore" : "Maximise"}
+      onclick={toggleMaximised}
+    >
+      <Icon name={maximised ? "restore" : "max"} size={16} />
     </button>
     <button class="rounded p-2 text-muted hover:text-bad" aria-label="Close" onclick={() => Window.Close()}>
       <Icon name="close" size={16} />

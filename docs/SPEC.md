@@ -155,6 +155,11 @@ can't be changed.
 - **`hosts`** (required): the only hosts the launcher will download files
   from for this server. Every URL in the profile and its manifests MUST be
   HTTPS on one of these hosts, except `links`, which open in the browser.
+  Redirects are checked against the same list. Files published as GitHub
+  release assets redirect from `github.com` to
+  `release-assets.githubusercontent.com` (formerly
+  `objects.githubusercontent.com`), so list those too; `d2pack init` does
+  when the manifest URL is on `github.com`.
 - **`game.version`**: `1.07`, `1.08`, `1.09b`, `1.09d`, `1.10f`, `1.11b`,
   `1.12a`, `1.13c`, `1.13d` or `1.14d`. Informational; used for display and
   for launcher features that only work on some versions. The subfolder
@@ -404,12 +409,16 @@ page for that server. They write to files inside the server folder only.
   advanced page. Anything else is refused, so a profile cannot smuggle in
   arguments the player did not see.
 - **`maxInstances`**: upper limit for multiboxing. Default 1.
+- **`setGateways`**: `false` for a server whose own game code sets the
+  gateway; the launcher then writes no Battle.net values (section 8).
+  Default `true`.
 
 The launcher starts the game like this:
 
 1. It takes a global launch lock, so two servers never launch at the same time.
-2. It writes the server's gateways to the registry (section 8).
-3. With `game.saves` set to `isolated`, it writes `Save Path`.
+2. Unless `setGateways` is `false`, it writes the server's gateways to the
+   registry (section 8).
+3. It sets `Save Path` when the server needs it (section 8).
 4. It starts `exe` with the working folder set to the server folder.
 5. It waits the player's launch delay before the next box, then releases the lock.
 
@@ -422,14 +431,16 @@ These are the only values the launcher writes:
 
 | Key | Value | Type | Written |
 |---|---|---|---|
-| `HKCU\Software\Battle.net\Configuration` | `Diablo II Battle.net Gateways` | `REG_MULTI_SZ` | The server's gateways, merged into the player's list |
-| `HKCU\Software\Blizzard Entertainment\Diablo II` | `BNETIP` | `REG_SZ` | The first gateway's host |
-| `HKCU\Software\Blizzard Entertainment\Diablo II` | `Preferred Realm` | `REG_SZ` | The first gateway's `realm`, when set |
-| `HKCU\Software\Blizzard Entertainment\Diablo II` | `Save Path` | `REG_SZ` | `<base>\Save\`, or `<server folder>\Save\` with `game.saves: isolated` |
+| `HKCU\Software\Battle.net\Configuration` | `Diablo II Battle.net Gateways` | `REG_MULTI_SZ` | The server's gateways, merged into the player's list. Not with `launch.setGateways: false` |
+| `HKCU\Software\Blizzard Entertainment\Diablo II` | `BNETIP` | `REG_SZ` | The first gateway's host. Not with `launch.setGateways: false` |
+| `HKCU\Software\Blizzard Entertainment\Diablo II` | `Preferred Realm` | `REG_SZ` | The first gateway's `realm`, when set. Not with `launch.setGateways: false` |
+| `HKCU\Software\Blizzard Entertainment\Diablo II` | `Save Path` | `REG_SZ` | `<server folder>\Save\` with `game.saves: isolated`; otherwise `<base>\Save\`, only when needed (below) |
 
-`Save Path` is written on every launch, not only for isolated servers;
-otherwise an isolated server's folder would stay set for the next server
-launched.
+An isolated server writes `Save Path` on every launch. A shared server writes
+`<base>\Save\` only when `Save Path` is unset or still holds an isolated
+server's folder (`<base>\<server id>\Save\`). So an isolated server's folder
+never stays set for the next server launched, and a `Save Path` the player
+chose themselves is kept.
 
 The gateway list is a multi-string: a header entry, the selected gateway as
 a two-digit index starting at `01`, then a `host`, `timezone`, `name` triple
@@ -441,8 +452,9 @@ header `1001` is read and the selected gateway shown in the main menu.
 
 A server's own game code may set the gateway itself. SlashDiablo's
 `SlashDiablo.dll` does, so for SlashDiablo the registry list has no visible
-effect. The launcher writes it regardless, so servers without such code need
-nothing extra.
+effect. The launcher writes it unless the profile sets
+`launch.setGateways: false`, so servers without such code need nothing extra,
+and servers with it can leave the player's Battle.net settings untouched.
 
 ## 9. Server listing
 

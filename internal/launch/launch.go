@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -118,6 +121,8 @@ func Boxes(serverDir string, p *spec.Profile, c Choices) ([]Box, error) {
 type Registry interface {
 	GatewayList() ([]string, error)
 	SetGatewayList([]string) error
+	// String reads a value under the game's own key; one not set is "".
+	String(name string) (string, error)
 	SetString(name, value string) error
 }
 
@@ -176,6 +181,7 @@ func (l *Launcher) Launch(ctx context.Context, base, serverDir string, p *spec.P
 			}
 		}
 
+		slog.Info("starting box", "box", i+1, "exe", b.Exe, "args", b.Args)
 		if err := l.start(b); err != nil {
 			return fmt.Errorf("starting box %d: %w", i+1, err)
 		}
@@ -186,32 +192,56 @@ func (l *Launcher) Launch(ctx context.Context, base, serverDir string, p *spec.P
 
 // configure writes the registry values listed in docs/SPEC.md section 8.
 func (l *Launcher) configure(base, serverDir string, p *spec.Profile) error {
+	if p.Launch.SetsGateways() {
+		if err := l.setGateways(p.Gateways); err != nil {
+			return err
+		}
+	}
+
+	return l.setSavePath(base, serverDir, p)
+}
+
+func (l *Launcher) setGateways(gateways []spec.Gateway) error {
 	existing, err := l.registry.GatewayList()
 	if err != nil {
 		return err
 	}
 
-	list := Merge(ParseGatewayList(existing), p.Gateways)
+	list := Merge(ParseGatewayList(existing), gateways)
 	if err := l.registry.SetGatewayList(list.Values()); err != nil {
 		return err
 	}
 
-	first := p.Gateways[0]
+	first := gateways[0]
 	if err := l.registry.SetString("BNETIP", first.Host); err != nil {
 		return err
 	}
 
 	if first.Realm != "" {
-		if err := l.registry.SetString("Preferred Realm", first.Realm); err != nil {
-			return err
-		}
+		return l.registry.SetString("Preferred Realm", first.Realm)
 	}
 
-	// Save Path is always written: a server with isolated saves would
-	// otherwise leave its folder in place for the next server launched.
+	return nil
+}
+
+// setSavePath points the game at the server's saves. An isolated server
+// always writes its own folder. A shared server writes the base's Save
+// folder only when Save Path is unset or still holds an isolated server's
+// folder, so an isolated path never carries over to the next server and a
+// Save Path the player chose is kept.
+func (l *Launcher) setSavePath(base, serverDir string, p *spec.Profile) error {
 	save := filepath.Join(base, "Save")
+
 	if p.Game.Saves == "isolated" {
 		save = filepath.Join(serverDir, "Save")
+	} else {
+		current, err := l.registry.String("Save Path")
+		if err != nil {
+			return err
+		}
+		if current != "" && !isolatedSavePath(base, current) {
+			return nil
+		}
 	}
 
 	if err := os.MkdirAll(save, 0o755); err != nil && !errors.Is(err, os.ErrExist) {
@@ -219,4 +249,18 @@ func (l *Launcher) configure(base, serverDir string, p *spec.Profile) error {
 	}
 
 	return l.registry.SetString("Save Path", save+string(filepath.Separator))
+}
+
+// serverID is the profile spec's id pattern.
+var serverID = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,31}$`)
+
+// isolatedSavePath reports whether path is <base>\<server id>\Save, the
+// folder the launcher writes for an isolated server.
+func isolatedSavePath(base, path string) bool {
+	path = filepath.Clean(path)
+	server := filepath.Dir(path)
+
+	return strings.EqualFold(filepath.Base(path), "Save") &&
+		strings.EqualFold(filepath.Dir(server), filepath.Clean(base)) &&
+		serverID.MatchString(strings.ToLower(filepath.Base(server)))
 }

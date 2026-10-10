@@ -3,6 +3,7 @@ package pack
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/diablo2org/launcher/internal/fetch"
@@ -98,8 +99,10 @@ func TestBuildManifestRejectsClashes(t *testing.T) {
 		t.Error("reserved file name accepted")
 	}
 
-	if _, err := BuildManifest(t.TempDir(), Options{BaseURL: "ftp://a.net"}); err == nil {
-		t.Error("non-https base URL accepted")
+	for _, base := range []string{"ftp://a.net", "http://a.net/live", "https:///live", "https://user:pw@a.net/live"} {
+		if _, err := BuildManifest(t.TempDir(), Options{BaseURL: base}); err == nil {
+			t.Errorf("base URL %s accepted", base)
+		}
 	}
 
 	for _, base := range []string{"https://a.net/live?token=x", "https://a.net/live#x", "https://a.net/live?"} {
@@ -124,6 +127,21 @@ func TestInitProfile(t *testing.T) {
 	}
 	if p.Hosts[0] != "files.myserver.net" || p.Gateways[0].Host != "play.myserver.net" || p.Game.Version != "1.13c" {
 		t.Errorf("profile = %+v", p)
+	}
+
+	data, err = InitProfile(InitOptions{
+		ID: "myserver", Name: "My Server", Gateway: "play.myserver.net",
+		ManifestURL: "https://github.com/me/files/releases/download/v1/manifest.json",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err = spec.ParseProfile(data)
+	if err != nil {
+		t.Fatalf("starter profile is not valid: %v", err)
+	}
+	if strings.Join(p.Hosts, " ") != "github.com release-assets.githubusercontent.com objects.githubusercontent.com" {
+		t.Errorf("hosts for a GitHub release = %v", p.Hosts)
 	}
 
 	if _, err := InitProfile(InitOptions{ID: "Bad Id", Name: "x", Gateway: "a.net", ManifestURL: "https://a.net/m.json"}); err == nil {

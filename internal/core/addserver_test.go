@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"errors"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -57,6 +58,23 @@ func TestAddServerByURL(t *testing.T) {
 	}
 	if servers, _ := m.Servers(ctx); len(servers) != 0 {
 		t.Errorf("after remove: %+v", servers)
+	}
+}
+
+// A profile published as a GitHub release asset is fetched through a redirect
+// to GitHub's asset CDN, so those hosts are allowed for a github.com URL only.
+func TestProfileHosts(t *testing.T) {
+	for raw, want := range map[string]string{
+		"https://github.com/o/r/releases/download/live/p.json":  "github.com release-assets.githubusercontent.com objects.githubusercontent.com",
+		"https://GitHub.com/o/r/releases/download/live/p.json":  "github.com release-assets.githubusercontent.com objects.githubusercontent.com",
+		"https://files.example.net/p.json":                      "files.example.net",
+		"https://raw.githubusercontent.com/o/r/main/p.json":     "raw.githubusercontent.com",
+		"https://github.com.evil.example/o/r/releases/x/p.json": "github.com.evil.example",
+	} {
+		u, _ := url.Parse(raw)
+		if got := strings.Join(profileHosts(u), " "); got != want {
+			t.Errorf("profileHosts(%s) = %s, want %s", raw, got, want)
+		}
 	}
 }
 

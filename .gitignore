@@ -8,3 +8,4 @@ build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
 frontend/bindings
 # Local dev environment (testenv/dev.ps1)
 testenv/.dev
+build/windows/info.stamped.json

@@ -5,6 +5,7 @@
 	"info": {
 		"0000": {
 			"ProductVersion": "0.1.0",
+			"FileVersion": "0.1.0",
 			"CompanyName": "diablo2org",
 			"FileDescription": "Launcher for Diablo II private servers",
 			"LegalCopyright": "(c) 2026 diablo2org contributors",
