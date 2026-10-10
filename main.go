@@ -144,7 +144,10 @@ func main() {
 		// The top bar draws its own controls and drags the window.
 		Frameless:        true,
 		BackgroundColour: application.NewRGB(10, 10, 13),
-		URL:              "/",
+		// The top bar is a native title bar (CSS app-region), so Windows
+		// gives it double-click to maximise, the window menu and snapping.
+		Windows: application.WindowsWindow{NonClientRegionSupport: true},
+		URL:     "/",
 	})
 
 	if err := a.Run(); err != nil {

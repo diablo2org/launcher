@@ -46,10 +46,17 @@ body {
 }
 
 /* Wails: the top bar drags the frameless window; controls inside it don't. */
+/* The top bar is the window's title bar. app-region makes it a native one
+   (WebView2 non-client regions), so double-click maximises and dragging
+   snaps. Wails' own dragging stays as a fallback for WebView2 runtimes too
+   old for app-region; where app-region works, the page never sees those
+   clicks, so the two don't meet. Controls inside opt out. */
 .drag {
+  app-region: drag;
   --wails-draggable: drag;
 }
 .no-drag {
+  app-region: no-drag;
   --wails-draggable: no-drag;
 }
 
