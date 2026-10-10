@@ -53,7 +53,7 @@ func buildSetup(t *testing.T) (*Plan, string) {
 
 	plan := &Plan{
 		Profile: filepath.Join(root, "profile.json"),
-		Source:  Sources{game},
+		Source:  Sources{{Folder: game}},
 		Exclude: []string{"*.txt"},
 		Manifests: []PlanEntry{
 			{Channel: "live", Once: []string{"UI.ini"}, Exclude: []string{"BH*"}},
@@ -172,12 +172,66 @@ func TestBuildFilesURL(t *testing.T) {
 	}
 }
 
+// Two channels layer the same base folder published once at its own URL,
+// each with its own patch folder published beside its manifest.
+func TestBuildSourceFilesURL(t *testing.T) {
+	plan, root := buildSetup(t)
+	live := filepath.Join(root, "live-patch")
+	write(t, live, "game.exe", "live exe")
+	test := filepath.Join(root, "test-patch")
+	write(t, test, "Test.dll", "test only")
+
+	base := Source{Folder: plan.Source[0].Folder, Files: "https://files.myserver.net/base/1.13c"}
+	plan.Manifests = []PlanEntry{
+		{Channel: "live", Source: Sources{base, {Folder: live}}, Exclude: []string{"BH*"}},
+		{Channel: "test", Source: Sources{base, {Folder: test}}, Exclude: []string{"BH*"}},
+	}
+	out := filepath.Join(root, "upload")
+
+	if _, err := Build(plan, BuildOptions{Version: "1", Out: out}); err != nil {
+		t.Fatal(err)
+	}
+
+	host := filepath.Join(out, "files.myserver.net")
+	urls := func(channel string) map[string]string {
+		m := readManifest(t, filepath.Join(host, channel, "manifest.json"))
+		got := map[string]string{}
+		for _, f := range m.Files {
+			got[f.Path] = f.URLs[0]
+		}
+		return got
+	}
+
+	l, tm := urls("live"), urls("test")
+	for _, c := range []struct{ got, want string }{
+		{l["game.exe"], "https://files.myserver.net/live/game.exe"},
+		{l["Patch_D2.mpq"], "https://files.myserver.net/base/1.13c/Patch_D2.mpq"},
+		{tm["Game.exe"], "https://files.myserver.net/base/1.13c/Game.exe"},
+		{tm["Patch_D2.mpq"], "https://files.myserver.net/base/1.13c/Patch_D2.mpq"},
+		{tm["Test.dll"], "https://files.myserver.net/test/Test.dll"},
+	} {
+		if c.got != c.want {
+			t.Errorf("URL %s, want %s", c.got, c.want)
+		}
+	}
+
+	// Each file is in the output once, where its URL says.
+	for _, rel := range []string{"base/1.13c/Game.exe", "base/1.13c/Patch_D2.mpq", "live/game.exe", "test/Test.dll"} {
+		if _, err := os.Stat(filepath.Join(host, filepath.FromSlash(rel))); err != nil {
+			t.Error(err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(host, "live", "Patch_D2.mpq")); err == nil {
+		t.Error("the shared base file was also published beside the live manifest")
+	}
+}
+
 func TestBuildLayersSources(t *testing.T) {
 	plan, root := buildSetup(t)
 	patch := filepath.Join(root, "current")
 	write(t, patch, "game.exe", "patched exe")
 	write(t, patch, "SlashDiablo.dll", "slash")
-	plan.Manifests[0].Source = Sources{plan.Source[0], patch}
+	plan.Manifests[0].Source = Sources{plan.Source[0], {Folder: patch}}
 	out := filepath.Join(root, "upload")
 
 	if _, err := Build(plan, BuildOptions{Version: "1", Out: out}); err != nil {
@@ -230,13 +284,13 @@ func TestBuildRejects(t *testing.T) {
 			return ""
 		}, "already exists"},
 		{"output inside source", func(p *Plan, _ string) string {
-			return filepath.Join(p.Source[0], "upload")
+			return filepath.Join(p.Source[0].Folder, "upload")
 		}, "inside the source"},
 		{"different files at one URL", func(p *Plan, root string) string {
 			other := filepath.Join(root, "other")
 			write(t, other, "BH.dll", "another bh")
 			p.Manifests[0].Exclude = nil
-			p.Manifests[1].Source = Sources{other}
+			p.Manifests[1].Source = Sources{{Folder: other}}
 			p.Manifests[1].Files = "https://files.myserver.net/live"
 			return ""
 		}, "different file"},
@@ -250,6 +304,10 @@ func TestBuildRejects(t *testing.T) {
 		}, "fragment"},
 		{"files off the profile's hosts", func(p *Plan, _ string) string {
 			p.Manifests[1].Files = "https://elsewhere.net/maphack"
+			return ""
+		}, "hosts"},
+		{"source files off the profile's hosts", func(p *Plan, _ string) string {
+			p.Source[0].Files = "https://elsewhere.net/base"
 			return ""
 		}, "hosts"},
 	}
@@ -320,7 +378,7 @@ func TestBuildRejectsOutputLinkedIntoSource(t *testing.T) {
 
 			// root/link points into the game folder, so root/link/upload is
 			// inside it although its path doesn't say so.
-			target := filepath.Join(plan.Source[0], filepath.FromSlash(nested))
+			target := filepath.Join(plan.Source[0].Folder, filepath.FromSlash(nested))
 			os.MkdirAll(target, 0o755)
 			link(t, target, filepath.Join(root, "link"))
 			out := filepath.Join(root, "link", "upload")
@@ -349,11 +407,40 @@ func TestLoadPlan(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Profile != filepath.Join(dir, "profile.json") || p.Source[0] != filepath.Join(dir, "game") {
+	if p.Profile != filepath.Join(dir, "profile.json") || p.Source[0].Folder != filepath.Join(dir, "game") {
 		t.Errorf("paths not resolved against the plan: %+v", p)
 	}
-	if !filepath.IsAbs(p.Manifests[1].Source[0]) || p.Manifests[0].Source[1] != filepath.Join(dir, "current") {
+	if !filepath.IsAbs(p.Manifests[1].Source[0].Folder) || p.Manifests[0].Source[1].Folder != filepath.Join(dir, "current") {
 		t.Errorf("source = %s", p.Manifests[1].Source)
+	}
+
+	write(t, dir, "files.json", `{
+  "profile": "profile.json",
+  "manifests": [
+    { "channel": "live", "source": [{ "folder": "1.13c", "files": "https://files.myserver.net/base/" }, "current"] },
+    { "channel": "test", "source": { "folder": "test", "files": "https://files.myserver.net/t/" } }
+  ]
+}`)
+	p, err = LoadPlan(filepath.Join(dir, "files.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s := p.Manifests[0].Source; len(s) != 2 || s[0] != (Source{filepath.Join(dir, "1.13c"), "https://files.myserver.net/base/"}) || s[1] != (Source{Folder: filepath.Join(dir, "current")}) {
+		t.Errorf("sources = %+v", s)
+	}
+	if s := p.Manifests[1].Source; len(s) != 1 || s[0].Files != "https://files.myserver.net/t/" {
+		t.Errorf("sources = %+v", s)
+	}
+
+	for name, source := range map[string]string{
+		"no folder":     `{ "files": "https://files.myserver.net/base/" }`,
+		"unknown field": `[{ "folder": "a", "url": "https://files.myserver.net/base/" }]`,
+		"number":        `7`,
+	} {
+		write(t, dir, "bad.json", `{ "profile": "p.json", "manifests": [ { "channel": "live", "source": `+source+` } ] }`)
+		if _, err := LoadPlan(filepath.Join(dir, "bad.json")); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
 	}
 
 	write(t, dir, "typo.json", `{ "profile": "p.json", "manifests": [ { "chanel": "live" } ] }`)

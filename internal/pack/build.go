@@ -43,7 +43,8 @@ type PlanEntry struct {
 	// folder.
 	Source Sources `json:"source,omitempty"`
 	// Files is the URL the files are published at, when that isn't the folder
-	// the manifest is published in.
+	// the manifest is published in. A source with its own Files overrides it
+	// for that source's files.
 	Files   string   `json:"files,omitempty"`
 	Once    []string `json:"once,omitempty"`
 	Exclude []string `json:"exclude,omitempty"`
@@ -51,22 +52,59 @@ type PlanEntry struct {
 }
 
 // Sources is one folder, or several layered in order: where two hold the
-// same file, the later one's is used. In JSON it is a string or a list.
-type Sources []string
+// same file, the later one's is used. In JSON it is a source or a list of
+// them.
+type Sources []Source
 
-// UnmarshalJSON accepts a single folder or a list of folders.
+// Source is a folder of game files. In JSON it is the folder's path, or
+// {"folder": ..., "files": ...} to publish its files at their own URL.
+type Source struct {
+	Folder string `json:"folder"`
+	// Files is the URL this folder's files are published at, so a folder
+	// several manifests layer, such as the base game files, can be uploaded
+	// once and shared. It overrides the entry's Files.
+	Files string `json:"files,omitempty"`
+}
+
+// errSource is how a source that isn't one of the accepted forms is
+// reported.
+var errSource = errors.New(`source must be a folder, {"folder": ..., "files": ...}, or a list of them`)
+
+// UnmarshalJSON accepts a source or a list of sources.
 func (s *Sources) UnmarshalJSON(data []byte) error {
-	var one string
-	if err := json.Unmarshal(data, &one); err == nil {
+	var one Source
+	if err := one.UnmarshalJSON(data); err == nil {
 		*s = Sources{one}
 		return nil
 	}
 
-	var many []string
+	var many []Source
 	if err := json.Unmarshal(data, &many); err != nil {
-		return errors.New("source must be a folder or a list of folders")
+		return errSource
 	}
 	*s = many
+
+	return nil
+}
+
+// UnmarshalJSON accepts a folder's path, or an object naming the folder and
+// where its files are published.
+func (s *Source) UnmarshalJSON(data []byte) error {
+	var folder string
+	if err := json.Unmarshal(data, &folder); err == nil {
+		*s = Source{Folder: folder}
+		return nil
+	}
+
+	// A plain struct type, so decoding doesn't come back here.
+	type source Source
+	var v source
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&v); err != nil || v.Folder == "" {
+		return errSource
+	}
+	*s = Source(v)
 
 	return nil
 }
@@ -112,7 +150,7 @@ func LoadPlan(file string) (*Plan, error) {
 	}
 	resolveAll := func(s Sources) {
 		for i := range s {
-			s[i] = resolve(s[i])
+			s[i].Folder = resolve(s[i].Folder)
 		}
 	}
 
@@ -299,16 +337,18 @@ func (b *builder) build(e PlanEntry, manifestURL string) (*Built, error) {
 	if len(sources) == 0 {
 		return nil, errors.New("no source folder")
 	}
-	for _, source := range sources {
-		if info, err := os.Stat(source); err != nil || !info.IsDir() {
-			return nil, fmt.Errorf("source %s is not a folder", source)
+	folders := make([]string, len(sources))
+	for i, source := range sources {
+		folders[i] = source.Folder
+		if info, err := os.Stat(source.Folder); err != nil || !info.IsDir() {
+			return nil, fmt.Errorf("source %s is not a folder", source.Folder)
 		}
-		in, err := contains(source, b.tmp)
+		in, err := contains(source.Folder, b.tmp)
 		if err != nil {
 			return nil, err
 		}
 		if in {
-			return nil, fmt.Errorf("the output folder can't be inside the source folder %s", source)
+			return nil, fmt.Errorf("the output folder can't be inside the source folder %s", source.Folder)
 		}
 	}
 
@@ -320,53 +360,60 @@ func (b *builder) build(e PlanEntry, manifestURL string) (*Built, error) {
 		return nil, fmt.Errorf("manifest URL %s doesn't name a file", manifestURL)
 	}
 
-	base := e.Files
-	if base == "" {
+	// Files are published beside the manifest, unless the entry or the
+	// source they come from says where.
+	entryBase := e.Files
+	if entryBase == "" {
 		u, _ := url.Parse(manifestURL)
 		u.Path = path.Dir(u.Path)
 		u.RawPath = ""
-		base = u.String()
-	}
-	baseRel, err := urlPath(base)
-	if err != nil {
-		return nil, err
-	}
-
-	opts := Options{
-		Server:  b.profile.ID,
-		Version: b.version,
-		BaseURL: base,
-		Once:    e.Once,
-		Exclude: append(append([]string{}, b.plan.Exclude...), e.Exclude...),
-		Only:    e.Only,
+		entryBase = u.String()
 	}
 
 	// Layer the sources: a later folder's file replaces an earlier one's.
 	type layered struct {
-		file   spec.File
-		source string
+		file    spec.File
+		source  string
+		baseRel string
 	}
 	var files []layered
 	index := map[string]int{}
 
 	for _, source := range sources {
-		m, err := BuildManifest(source, opts)
+		base := entryBase
+		if source.Files != "" {
+			base = source.Files
+		}
+		baseRel, err := urlPath(base)
+		if err != nil {
+			return nil, err
+		}
+
+		m, err := BuildManifest(source.Folder, Options{
+			Server:  b.profile.ID,
+			Version: b.version,
+			BaseURL: base,
+			Once:    e.Once,
+			Exclude: append(append([]string{}, b.plan.Exclude...), e.Exclude...),
+			Only:    e.Only,
+		})
 		if err != nil {
 			return nil, err
 		}
 
 		for _, f := range m.Files {
+			l := layered{f, source.Folder, baseRel}
 			key := paths.Key(f.Path)
 			if i, ok := index[key]; ok {
-				files[i] = layered{f, source}
+				files[i] = l
 				continue
 			}
 			index[key] = len(files)
-			files = append(files, layered{f, source})
+			files = append(files, l)
 		}
 	}
 	if len(files) == 0 {
-		return nil, fmt.Errorf("no files in %s matched", strings.Join(sources, ", "))
+		return nil, fmt.Errorf("no files in %s matched", strings.Join(folders, ", "))
 	}
 
 	sort.Slice(files, func(i, j int) bool {
@@ -377,7 +424,7 @@ func (b *builder) build(e PlanEntry, manifestURL string) (*Built, error) {
 	built := &Built{Name: e.name(), Manifest: filepath.Join(b.out, filepath.FromSlash(manifestRel)), Files: len(files)}
 
 	for _, l := range files {
-		dst := path.Join(baseRel, l.file.Path)
+		dst := path.Join(l.baseRel, l.file.Path)
 		if err := b.place(filepath.Join(l.source, filepath.FromSlash(l.file.Path)), dst, l.file); err != nil {
 			return nil, err
 		}
