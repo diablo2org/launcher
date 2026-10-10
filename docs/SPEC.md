@@ -139,8 +139,11 @@ can't be changed.
   older than one it has already seen, so an old profile can't be replayed.
 - **`minLauncher`**: the oldest launcher version that understands this
   profile. Older launchers show "update the launcher to play".
-- **`links`**: any of `website`, `discord`, `forum`, `trade`, `wiki`,
-  `register`, `support`. Shown as buttons.
+- **`links`**: any of `website`, `discord`, `forum`, `wiki`, `trade`,
+  `register`, `support`, `donate`, each an HTTPS URL. Every link given is a
+  button on the server's launch page, in that order, and opens in the
+  player's browser; hovering one shows where it goes. The launcher's
+  Community tab opens `discord`, else `forum`, else `website`.
 - **`branding`**:
   - `logo`: PNG or WebP, at most 512 KB, square or wide.
   - `background`: JPEG or WebP, at most 3 MB, 16:9, at least 1280x720.

@@ -66,6 +66,9 @@
         },
         "support": {
           "$ref": "#/$defs/httpsUrl"
+        },
+        "donate": {
+          "$ref": "#/$defs/httpsUrl"
         }
       }
     },

@@ -4,6 +4,7 @@
   import type { ServerInfo } from "../../bindings/github.com/diablo2org/launcher/internal/core";
   import { bytes, errorText } from "./format";
   import NewsList from "./NewsList.svelte";
+  import ServerLinks from "./ServerLinks.svelte";
   import { app, type ServerData } from "./state.svelte";
 
   let { info, data }: { info: ServerInfo; data: ServerData } = $props();
@@ -74,6 +75,10 @@
         </div>
       </div>
     {/if}
+
+    <div class="shrink-0 px-12">
+      <ServerLinks links={profile?.links} />
+    </div>
 
     <div class="flex h-[120px] shrink-0 items-end gap-8 px-12 pb-6">
       <div class="min-w-0 flex-1 pb-3">
