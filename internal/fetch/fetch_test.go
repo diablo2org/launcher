@@ -5,6 +5,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/pem"
+	"errors"
+	"fmt"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -75,6 +79,82 @@ func TestRedirectToOtherHostRefused(t *testing.T) {
 
 	if _, err := c.Document(context.Background(), srv.URL+"/doc"); err == nil || !strings.Contains(err.Error(), "not allowed") {
 		t.Errorf("redirect followed: %v", err)
+	}
+}
+
+// A CDN redirect carries a signed token in its query; errors leave it out.
+func TestRedirectErrorHidesQuery(t *testing.T) {
+	srv, c := server(t, func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "https://cdn.example/asset?sig=SECRET&jwt=SECRET", http.StatusFound)
+	})
+
+	_, err := c.Document(context.Background(), srv.URL+"/doc")
+	if err == nil || strings.Contains(err.Error(), "SECRET") || !strings.Contains(err.Error(), "https://cdn.example/asset") {
+		t.Errorf("err = %v", err)
+	}
+	if !errors.Is(err, ErrNotAllowed) || Retryable(err) {
+		t.Errorf("refused redirect: Is(ErrNotAllowed) = %v, Retryable = %v", errors.Is(err, ErrNotAllowed), Retryable(err))
+	}
+}
+
+func TestBadURLHidesQuery(t *testing.T) {
+	err := New([]string{"a.example"}).Allowed("https://a.example/%ZZ?sig=SECRET")
+	if err == nil || strings.Contains(err.Error(), "SECRET") || !errors.Is(err, ErrNotAllowed) {
+		t.Errorf("err = %v", err)
+	}
+}
+
+func TestMalformedRedirectHidesQuery(t *testing.T) {
+	srv, c := server(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Location", "https://cdn.example/%ZZ?sig=SECRET")
+		w.WriteHeader(http.StatusFound)
+	})
+
+	_, err := c.Document(context.Background(), srv.URL+"/doc")
+	if err == nil || strings.Contains(err.Error(), "SECRET") {
+		t.Errorf("err = %v", err)
+	}
+}
+
+func TestRetryable(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"busy", &StatusError{Code: http.StatusServiceUnavailable}, true},
+		{"server error", &StatusError{Code: http.StatusInternalServerError}, true},
+		{"rate limited", &StatusError{Code: http.StatusTooManyRequests}, true},
+		{"missing", &StatusError{Code: http.StatusNotFound}, false},
+		{"forbidden", &StatusError{Code: http.StatusForbidden}, false},
+		{"cut short", fmt.Errorf("x: %w", io.ErrUnexpectedEOF), true},
+		{"network", &net.OpError{Op: "dial", Err: errors.New("refused")}, true},
+		{"refused URL", New(nil).Allowed("https://a.example/x"), false},
+		{"cancelled", fmt.Errorf("x: %w", context.Canceled), false},
+		{"hash", errors.New("x: SHA-256 0000 does not match the manifest"), false},
+	} {
+		if got := Retryable(tt.err); got != tt.want {
+			t.Errorf("%s: Retryable(%v) = %v, want %v", tt.name, tt.err, got, tt.want)
+		}
+	}
+}
+
+func TestFileCutShortIsRetryable(t *testing.T) {
+	body := []byte("the whole file")
+	sum := sha256.Sum256(body)
+
+	srv, c := server(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", fmt.Sprint(len(body)))
+		w.Write(body[:4])
+	})
+
+	dest := filepath.Join(t.TempDir(), "f")
+	err := c.File(context.Background(), srv.URL+"/f", dest, int64(len(body)), hex.EncodeToString(sum[:]), nil)
+	if err == nil || !Retryable(err) {
+		t.Errorf("cut-short download: err = %v, Retryable = %v", err, Retryable(err))
+	}
+	if _, statErr := os.Stat(dest); !os.IsNotExist(statErr) {
+		t.Error("partial file left behind")
 	}
 }
 
