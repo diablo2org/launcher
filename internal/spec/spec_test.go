@@ -92,6 +92,30 @@ func TestListing(t *testing.T) {
 	}
 }
 
+func TestLinks(t *testing.T) {
+	p, err := ParseProfile(edit(t, func(d map[string]interface{}) {
+		d["links"] = map[string]interface{}{"donate": "https://slashdiablo.net/donate", "support": "https://slashdiablo.net/help"}
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Links.Donate != "https://slashdiablo.net/donate" || p.Links.Support != "https://slashdiablo.net/help" {
+		t.Errorf("links = %+v", p.Links)
+	}
+
+	// Links open in the browser, so they must be https; unknown ones are
+	// refused rather than silently never shown.
+	for _, links := range []map[string]interface{}{
+		{"donate": "http://slashdiablo.net/donate"},
+		{"donate": "javascript:alert(1)"},
+		{"patreon": "https://patreon.com/slashdiablo"},
+	} {
+		if _, err := ParseProfile(edit(t, func(d map[string]interface{}) { d["links"] = links })); err == nil {
+			t.Errorf("links %v accepted", links)
+		}
+	}
+}
+
 func TestProfileProblems(t *testing.T) {
 	components := func(doc map[string]interface{}) []interface{} {
 		return doc["components"].([]interface{})

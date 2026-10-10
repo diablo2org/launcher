@@ -28,7 +28,8 @@ type Profile struct {
 	Ladder      string      `json:"ladder,omitempty"`
 }
 
-// Links are opened in the player's browser.
+// Links are opened in the player's browser, as buttons on the server's launch
+// page.
 type Links struct {
 	Website  string `json:"website,omitempty"`
 	Discord  string `json:"discord,omitempty"`
@@ -37,6 +38,7 @@ type Links struct {
 	Wiki     string `json:"wiki,omitempty"`
 	Register string `json:"register,omitempty"`
 	Support  string `json:"support,omitempty"`
+	Donate   string `json:"donate,omitempty"`
 }
 
 // Branding is how the server's tab looks.
