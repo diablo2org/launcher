@@ -11,3 +11,6 @@ validate against the schemas in [`schema/`](../schema) but are **not live**:
 - File sizes and hashes in `manifest.json` are placeholders, and the file
   list is cut down to one of each kind: a game file, a mod archive, a
   player-owned `once` file and a `delete`.
+- `report-relay/` is a bug report endpoint (SPEC 3.4) as a Cloudflare
+  Worker that posts reports to a Discord channel. Unlike the rest, it is
+  meant to be deployed as it is.

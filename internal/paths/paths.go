@@ -66,6 +66,45 @@ func Check(path string) error {
 	return nil
 }
 
+// CheckPattern is Check for a file pattern: * and ? may appear in the last
+// segment, which must also name something, so a pattern can't take a whole
+// folder.
+func CheckPattern(pattern string) error {
+	if strings.HasPrefix(pattern, "/") {
+		return fmt.Errorf("%q: must be relative", pattern)
+	}
+
+	dir, name := "", pattern
+	if i := strings.LastIndexByte(pattern, '/'); i >= 0 {
+		dir, name = pattern[:i], pattern[i+1:]
+	}
+
+	if dir != "" {
+		if err := Check(dir); err != nil {
+			return err
+		}
+	}
+
+	// Brackets would be a character class to the matcher.
+	if strings.ContainsAny(name, "[]") {
+		return fmt.Errorf("%q: [ and ] are not allowed in a pattern", pattern)
+	}
+
+	if !strings.ContainsFunc(name, func(r rune) bool {
+		return r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9'
+	}) {
+		return fmt.Errorf("%q: the file name must contain a letter or digit", pattern)
+	}
+
+	// Check the name with the wildcards stood in for, so it gets the same
+	// rules as a plain file name.
+	if err := Check(strings.NewReplacer("*", "x", "?", "x").Replace(name)); err != nil {
+		return fmt.Errorf("%q: %w", pattern, err)
+	}
+
+	return nil
+}
+
 // Key is the form two paths are compared in. Windows paths are
 // case-insensitive, so "Game.exe" and "game.exe" are the same file.
 func Key(path string) string {

@@ -4,6 +4,7 @@
 package fetch
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"crypto/tls"
@@ -263,6 +264,55 @@ func (c *Client) Document(ctx context.Context, rawURL string) ([]byte, error) {
 	}
 
 	return data, nil
+}
+
+// maxReply is the most read of a server's answer to an upload.
+const maxReply = 64 << 10
+
+// Post sends body to rawURL and returns the server's answer. A redirect is
+// refused rather than followed, so the upload only ever goes to the URL the
+// player was shown. It isn't retried: the server may have taken it.
+func (c *Client) Post(ctx context.Context, rawURL, contentType string, body []byte) ([]byte, error) {
+	if err := c.Allowed(rawURL); err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, rawURL, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "diablo2org-launcher")
+	req.Header.Set("Content-Type", contentType)
+
+	h := *c.http
+	h.CheckRedirect = func(*http.Request, []*http.Request) error {
+		return refusal(fmt.Sprintf("%s: redirected, which uploads don't follow", shown(rawURL)))
+	}
+
+	resp, err := h.Do(req)
+	if err != nil {
+		var r refusal
+		if errors.As(err, &r) {
+			return nil, r
+		}
+		var ue *url.Error
+		if errors.As(err, &ue) {
+			ue.URL = shown(ue.URL)
+		}
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	reply, err := io.ReadAll(io.LimitReader(resp.Body, maxReply))
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", shown(rawURL), err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return reply, &StatusError{URL: shown(rawURL), Code: resp.StatusCode, Status: resp.Status}
+	}
+
+	return reply, nil
 }
 
 // Progress is called as a file downloads with the bytes written so far.

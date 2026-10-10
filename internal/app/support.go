@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -32,7 +33,7 @@ func NewSupportService(st *store.Store, m *core.Manager, host Host) *SupportServ
 // ReportContents lists what a bug report would hold, for the player to see
 // before making one.
 func (s *SupportService) ReportContents() []report.Item {
-	return report.Collect(s.input())
+	return report.Collect(s.input(""))
 }
 
 // SaveReport asks where to save a bug report, writes it there and shows it.
@@ -51,7 +52,7 @@ func (s *SupportService) SaveReport() (string, error) {
 		path += ".zip"
 	}
 
-	in := s.input()
+	in := s.input("")
 	var buf bytes.Buffer
 	if err := report.Write(&buf, report.Collect(in), in.Home); err != nil {
 		return "", err
@@ -85,7 +86,9 @@ func (s *SupportService) LogFrontendError(message string) {
 	slog.Error("frontend", "err", message)
 }
 
-func (s *SupportService) input() report.Input {
+// input is where a report's contents come from: every server's, or when only
+// is set, that server's alone, with state.json cut down to match.
+func (s *SupportService) input(only string) report.Input {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		home = ""
@@ -97,6 +100,22 @@ func (s *SupportService) input() report.Input {
 			in.Servers = append(in.Servers, id)
 		}
 		sort.Strings(in.Servers)
+
+		if only != "" {
+			in.State = scopedState(state, only)
+		}
+	}
+	if only != "" {
+		in.Servers = []string{only}
+	}
+
+	// A server whose profile can't be loaded, offline say, just adds none of
+	// its own files.
+	in.Files = map[string][]string{}
+	for _, id := range in.Servers {
+		if p, err := s.m.Profile(context.Background(), id); err == nil && len(p.Report.Files) > 0 {
+			in.Files[id] = p.Report.Files
+		}
 	}
 
 	var about strings.Builder

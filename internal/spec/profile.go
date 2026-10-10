@@ -24,6 +24,7 @@ type Profile struct {
 	Components  []Component `json:"components,omitempty"`
 	Settings    []Setting   `json:"settings,omitempty"`
 	Launch      Launch      `json:"launch,omitempty"`
+	Report      Report      `json:"report,omitempty"`
 	News        string      `json:"news,omitempty"`
 	Ladder      string      `json:"ladder,omitempty"`
 }
@@ -151,6 +152,31 @@ func (l Launch) SetsGateways() bool {
 	return l.SetGateways == nil || *l.SetGateways
 }
 
+// Report is what the server wants in a bug report beyond the launcher's own
+// logs and the game's crash logs.
+type Report struct {
+	// Files are patterns for files in the server folder, such as the logs
+	// the server's own game code writes.
+	Files []string `json:"files,omitempty"`
+	// URL is where the launcher sends this server's bug reports. Without
+	// one, a report is only saved.
+	URL string `json:"url,omitempty"`
+	// MaxBytes is the largest report the URL accepts.
+	MaxBytes int `json:"maxBytes,omitempty"`
+}
+
+// DefaultReportBytes is a report's size limit when the profile gives none.
+const DefaultReportBytes = 8 << 20
+
+// Limit is the largest report the server accepts.
+func (r Report) Limit() int {
+	if r.MaxBytes == 0 {
+		return DefaultReportBytes
+	}
+
+	return r.MaxBytes
+}
+
 // ExePath is the executable to start, defaulting to Game.exe.
 func (l Launch) ExePath() string {
 	if l.Exe == "" {
@@ -178,8 +204,9 @@ func ParseProfile(data []byte) (*Profile, error) {
 func (p *Profile) check() error {
 	var problems Problems
 
-	// Every download must come from a host the profile declares.
-	urls := map[string]string{"news": p.News, "ladder": p.Ladder}
+	// Every download, and the bug report upload, must use a host the
+	// profile declares.
+	urls := map[string]string{"news": p.News, "ladder": p.Ladder, "report.url": p.Report.URL}
 	if p.Branding.Logo != nil {
 		urls["branding.logo"] = p.Branding.Logo.URL
 	}
@@ -249,6 +276,12 @@ func (p *Profile) check() error {
 
 	if err := paths.Check(p.Launch.ExePath()); err != nil {
 		problems.add("launch.exe: %v", err)
+	}
+
+	for _, f := range p.Report.Files {
+		if err := paths.CheckPattern(f); err != nil {
+			problems.add("report.files: %v", err)
+		}
 	}
 
 	settings := make(map[string]bool, len(p.Settings))

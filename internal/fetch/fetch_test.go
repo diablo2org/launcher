@@ -398,3 +398,40 @@ func TestResumeReplacesLink(t *testing.T) {
 		t.Error("link still there")
 	}
 }
+
+func TestPost(t *testing.T) {
+	srv, c := server(t, func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		switch {
+		case r.URL.Path == "/moved":
+			http.Redirect(w, r, "/report", http.StatusTemporaryRedirect)
+		case r.Method != http.MethodPost || r.Header.Get("Content-Type") != "text/plain" || string(body) != "hello":
+			http.Error(w, "bad request", http.StatusBadRequest)
+		case r.URL.Path == "/full":
+			http.Error(w, `{"error": "full"}`, http.StatusRequestEntityTooLarge)
+		default:
+			w.Write([]byte(`{"id": "1"}`))
+		}
+	})
+
+	reply, err := c.Post(context.Background(), srv.URL+"/report", "text/plain", []byte("hello"))
+	if err != nil || string(reply) != `{"id": "1"}` {
+		t.Errorf("Post = %q, %v", reply, err)
+	}
+
+	// A refusal still returns what the server said.
+	reply, err = c.Post(context.Background(), srv.URL+"/full", "text/plain", []byte("hello"))
+	var status *StatusError
+	if !errors.As(err, &status) || status.Code != http.StatusRequestEntityTooLarge || !strings.Contains(string(reply), "full") {
+		t.Errorf("Post = %q, %v", reply, err)
+	}
+
+	// A redirect isn't followed, even to the same host.
+	if _, err := c.Post(context.Background(), srv.URL+"/moved", "text/plain", []byte("hello")); !errors.Is(err, ErrNotAllowed) {
+		t.Errorf("redirect: %v", err)
+	}
+
+	if _, err := c.Post(context.Background(), "https://evil.example/report", "text/plain", []byte("hello")); !errors.Is(err, ErrNotAllowed) {
+		t.Errorf("other host: %v", err)
+	}
+}
