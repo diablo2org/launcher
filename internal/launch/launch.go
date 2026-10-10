@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -180,6 +181,7 @@ func (l *Launcher) Launch(ctx context.Context, base, serverDir string, p *spec.P
 			}
 		}
 
+		slog.Info("starting box", "box", i+1, "exe", b.Exe, "args", b.Args)
 		if err := l.start(b); err != nil {
 			return fmt.Errorf("starting box %d: %w", i+1, err)
 		}

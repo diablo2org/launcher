@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/diablo2org/launcher/internal/core"
 	"github.com/diablo2org/launcher/internal/fetch"
 	"github.com/diablo2org/launcher/internal/install"
+	"github.com/diablo2org/launcher/internal/logs"
 	"github.com/diablo2org/launcher/internal/sync"
 	"github.com/diablo2org/launcher/internal/updates"
 )
@@ -23,6 +25,10 @@ type Host struct {
 	Updates *fetch.Client
 	// OpenFolder shows a folder in the file manager.
 	OpenFolder func(path string) error
+	// SaveFile asks where to save a file; "" means cancelled.
+	SaveFile func(title, name string) (string, error)
+	// ShowFile shows a file, selected, in the file manager.
+	ShowFile func(path string) error
 }
 
 // ServerService is how the frontend drives the launcher.
@@ -60,6 +66,7 @@ func (s *ServerService) Overview(ctx context.Context) Overview {
 
 	o := Overview{Base: s.m.Base(), Favourites: s.m.Favourites(), Servers: []core.ServerInfo{}, FirstRun: s.m.FirstRun()}
 	if err != nil {
+		slog.Warn("servers", "err", err)
 		o.Error = err.Error()
 	}
 	if servers != nil {
@@ -70,7 +77,10 @@ func (s *ServerService) Overview(ctx context.Context) Overview {
 		r, warning, err := s.m.CheckBase()
 		o.Report, o.Warning = r, warning
 		if err != nil {
+			slog.Warn("diablo ii folder", "err", err)
 			o.BaseError = err.Error()
+		} else if !r.OK() {
+			slog.Warn("diablo ii folder", "missing", r.Missing)
 		}
 	}
 
@@ -81,15 +91,17 @@ func (s *ServerService) Overview(ctx context.Context) Overview {
 func (s *ServerService) AddServer(ctx context.Context, profileURL string) (string, error) {
 	p, err := s.m.AddServer(ctx, profileURL)
 	if err != nil {
+		slog.Error("add server", "url", logs.RedactURLs(profileURL), "err", logs.RedactURLs(err.Error()))
 		return "", err
 	}
+	slog.Info("server added", "server", p.ID, "url", logs.RedactURLs(profileURL))
 
 	return p.ID, nil
 }
 
 // RemoveServer forgets a server added by URL.
 func (s *ServerService) RemoveServer(id string) error {
-	return s.m.RemoveServer(id)
+	return logged("remove server", id, s.m.RemoveServer(id))
 }
 
 // ChooseBase lets the player pick their Diablo II folder.
@@ -100,8 +112,9 @@ func (s *ServerService) ChooseBase(ctx context.Context) (Overview, error) {
 	}
 
 	if _, err := s.m.SetBase(dir); err != nil {
-		return s.Overview(ctx), err
+		return s.Overview(ctx), logged("choose diablo ii folder", "", err)
 	}
+	slog.Info("diablo ii folder chosen", "dir", dir)
 
 	return s.Overview(ctx), nil
 }
@@ -146,6 +159,7 @@ type UpdateResult struct {
 
 // Update installs or updates a server.
 func (s *ServerService) Update(ctx context.Context, id string, allowCopy bool) UpdateResult {
+	slog.Info("update", "server", id, "allowCopy", allowCopy)
 	err := s.m.Update(ctx, id, allowCopy, func(p sync.Progress) {
 		s.host.Emit("update:progress", UpdateProgress{Server: id, Progress: p})
 	})
@@ -153,17 +167,21 @@ func (s *ServerService) Update(ctx context.Context, id string, allowCopy bool) U
 	var needsCopy core.ErrNeedsCopy
 	switch {
 	case err == nil:
+		slog.Info("update done", "server", id)
 		return UpdateResult{OK: true}
 	case errors.As(err, &needsCopy):
+		slog.Info("update needs archives copied", "server", id, "bytes", needsCopy.Bytes)
 		return UpdateResult{NeedsCopy: true, CopyBytes: needsCopy.Bytes}
 	default:
+		logged("update", id, err)
 		return UpdateResult{Error: err.Error()}
 	}
 }
 
 // Play starts the server.
 func (s *ServerService) Play(ctx context.Context, id string) error {
-	return s.m.Play(ctx, id)
+	slog.Info("play", "server", id)
+	return logged("play", id, s.m.Play(ctx, id))
 }
 
 // Choices returns the player's picks for a server.
@@ -173,17 +191,17 @@ func (s *ServerService) Choices(ctx context.Context, id string) (core.Choices, e
 
 // SetChannel switches release channel.
 func (s *ServerService) SetChannel(ctx context.Context, id, channel string) error {
-	return s.m.SetChannel(ctx, id, channel)
+	return logged("set channel "+channel, id, s.m.SetChannel(ctx, id, channel))
 }
 
 // SetComponent turns a component on at a version, or off with "".
 func (s *ServerService) SetComponent(ctx context.Context, id, component, version string) error {
-	return s.m.SetComponent(ctx, id, component, version)
+	return logged("set component "+component+" "+version, id, s.m.SetComponent(ctx, id, component, version))
 }
 
 // SetInstances sets the number of boxes and d2gl profile splitting.
 func (s *ServerService) SetInstances(ctx context.Context, id string, n int, splitD2GL bool) error {
-	return s.m.SetInstances(ctx, id, n, splitD2GL)
+	return logged("set instances", id, s.m.SetInstances(ctx, id, n, splitD2GL))
 }
 
 // OpenServerFolder shows a server's folder, for dropping in custom files.
@@ -211,7 +229,7 @@ func (s *ServerService) Settings(ctx context.Context, id string) ([]core.Setting
 
 // SetSetting changes one setting.
 func (s *ServerService) SetSetting(ctx context.Context, id, setting string, value any) error {
-	return s.m.SetSetting(ctx, id, setting, value)
+	return logged("set setting "+setting, id, s.m.SetSetting(ctx, id, setting, value))
 }
 
 // News returns a server's latest posts.
@@ -252,6 +270,17 @@ func (s *ServerService) CheckForUpdate(ctx context.Context) *updates.Release {
 	}
 
 	return r
+}
+
+// logged records a failed action in the log, so it's there for a bug report,
+// and returns the error unchanged. URLs in the error lose their queries,
+// which can hold tokens.
+func logged(action, server string, err error) error {
+	if err != nil {
+		slog.Error(action, "server", server, "err", logs.RedactURLs(err.Error()))
+	}
+
+	return err
 }
 
 // Branding is a server's images as data URLs, ready for the page.

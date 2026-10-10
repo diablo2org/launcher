@@ -3,7 +3,9 @@ package main
 import (
 	"embed"
 	"log"
+	"log/slog"
 	"os"
+	"strconv"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 
@@ -11,6 +13,7 @@ import (
 	"github.com/diablo2org/launcher/internal/core"
 	"github.com/diablo2org/launcher/internal/fetch"
 	"github.com/diablo2org/launcher/internal/launch"
+	"github.com/diablo2org/launcher/internal/logs"
 	"github.com/diablo2org/launcher/internal/store"
 )
 
@@ -36,6 +39,9 @@ const (
 	envDevCA = "LAUNCHER_DEV_CA"
 	// envData replaces the data folder, to keep test runs separate.
 	envData = "LAUNCHER_DATA_DIR"
+	// envDevTools opens WebView2's DevTools protocol on this port, so tests
+	// can drive the page.
+	envDevTools = "LAUNCHER_DEVTOOLS_PORT"
 )
 
 func init() {
@@ -55,6 +61,12 @@ func main() {
 	st, err := store.Open(dataDir)
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	// Without a log file the launcher still runs; it just can't help with a
+	// bug report.
+	if closeLog, err := logs.Setup(dataDir, app.Version); err == nil {
+		defer closeLog()
 	}
 
 	var clientOpts []fetch.Option
@@ -84,7 +96,15 @@ func main() {
 	host := app.Host{
 		Updates:    fetch.New([]string{"api.github.com"}),
 		OpenFolder: func(path string) error { return a.Env.OpenFileManager(path, false) },
-		Emit:       func(name string, data any) { a.Event.Emit(name, data) },
+		ShowFile:   func(path string) error { return a.Env.OpenFileManager(path, true) },
+		SaveFile: func(title, name string) (string, error) {
+			return a.Dialog.SaveFile().
+				SetMessage(title).
+				SetFilename(name).
+				AddFilter("Zip files", "*.zip").
+				PromptForSingleSelection()
+		},
+		Emit: func(name string, data any) { a.Event.Emit(name, data) },
 		PickFolder: func(title string) (string, error) {
 			return a.Dialog.OpenFile().
 				SetTitle(title).
@@ -100,7 +120,12 @@ func main() {
 		Services: []application.Service{
 			application.NewService(app.NewServerService(manager, host)),
 			application.NewService(app.NewProfileService(exampleProfile)),
+			application.NewService(app.NewSupportService(st, manager, host)),
 		},
+		// Wails' own problems go to the log file too; its routine messages,
+		// such as every asset served, don't.
+		Logger:  slog.New(logs.AtLeast(slog.Default().Handler(), slog.LevelWarn)),
+		Windows: windowsOptions(),
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
 		},
@@ -125,4 +150,17 @@ func main() {
 	if err := a.Run(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func windowsOptions() application.WindowsOptions {
+	var o application.WindowsOptions
+	if v := os.Getenv(envDevTools); v != "" {
+		if port, err := strconv.Atoi(v); err == nil && port >= 1 && port <= 65535 {
+			o.AdditionalBrowserArgs = []string{"--remote-debugging-port=" + strconv.Itoa(port)}
+		} else {
+			slog.Warn("ignoring "+envDevTools+": not a port number", "value", v)
+		}
+	}
+
+	return o
 }
