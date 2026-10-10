@@ -504,6 +504,15 @@ func TestSignedManifests(t *testing.T) {
 		t.Error("files from an unsigned manifest were installed")
 	}
 
+	// A new manifest published without its signature is an error, not a
+	// quiet fall back to the cached one.
+	h.site.mu.Lock()
+	delete(h.site.files, "/live.json.sig")
+	h.site.mu.Unlock()
+	if st := h.m.Status(ctx, "slash"); !strings.Contains(st.Error, "signature couldn't be downloaded") {
+		t.Errorf("missing signature: %+v", st)
+	}
+
 	// Signed with the key, the new manifest is used.
 	h.site.signAll(key)
 	if err := h.m.Update(ctx, "slash", false, nil); err != nil {

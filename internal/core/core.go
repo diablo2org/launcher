@@ -585,6 +585,12 @@ func (m *Manager) manifest(ctx context.Context, id string, p *spec.Profile, rawU
 	}
 
 	data, sig, fetchErr := m.fetchManifest(ctx, p, rawURL, keys != nil)
+	if errors.Is(fetchErr, errNoSignature) {
+		// The host answered with the manifest, so it isn't offline: the
+		// server published one without its signature. Saying so beats
+		// quietly staying on the cached copy.
+		return nil, fmt.Errorf("%w; the update was stopped so no files from it are used. Tell %s's team if this keeps happening", fetchErr, p.Name)
+	}
 	cached := false
 	if fetchErr != nil {
 		data, err = m.store.ReadCache(id, name)
@@ -638,11 +644,15 @@ func (m *Manager) fetchManifest(ctx context.Context, p *spec.Profile, rawURL str
 	}
 	sig, err = c.Document(ctx, sigURL)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("%s: %w: %w", rawURL, errNoSignature, err)
 	}
 
 	return data, sig, nil
 }
+
+// errNoSignature means a signed server's manifest downloaded but its
+// signature didn't.
+var errNoSignature = errors.New("the manifest's signature couldn't be downloaded")
 
 // layers fetches the channel manifest and one per wanted component.
 func (m *Manager) layers(ctx context.Context, id string, p *spec.Profile, srv *store.Server) ([]layer, error) {
