@@ -53,6 +53,15 @@ if (-not (Test-Path $Jar)) {
 foreach ($p in $Path) {
     $file = (Resolve-Path $p).Path
 
+    # CodeSignTool goes by the file's extension, and NSIS hands over the
+    # uninstaller as a .tmp file, so anything else is signed as an .exe copy
+    # and copied back.
+    $work = $file
+    if ([IO.Path]::GetExtension($file) -notin ".exe", ".dll") {
+        $work = Join-Path $Temp ("sign-" + [guid]::NewGuid() + ".exe")
+        Copy-Item $file $work
+    }
+
     # CodeSignTool can report a failure and still exit 0, so the signature on
     # the file is what counts. eSigner may refuse a one-time code used moments
     # before, by the previous file, so a failure is tried once more after the
@@ -68,7 +77,7 @@ foreach ($p in $Path) {
                 "-password=$env:ES_PASSWORD" `
                 "-credential_id=$env:ES_CREDENTIAL_ID" `
                 "-totp_secret=$env:ES_TOTP_SECRET" `
-                "-input_file_path=$file" `
+                "-input_file_path=$work" `
                 "-override=true"
             $exit = $LASTEXITCODE
         }
@@ -76,7 +85,7 @@ foreach ($p in $Path) {
             Pop-Location
         }
 
-        $sig = Get-AuthenticodeSignature $file
+        $sig = Get-AuthenticodeSignature $work
         if ($exit -eq 0 -and $sig.Status -eq "Valid" -and $sig.TimeStamperCertificate) {
             break
         }
@@ -85,6 +94,11 @@ foreach ($p in $Path) {
         }
         Write-Warning "signing $file didn't take (exit $exit, status $($sig.Status)); trying again with a new code"
         Start-Sleep -Seconds 31
+    }
+
+    if ($work -ne $file) {
+        Copy-Item $work $file -Force
+        Remove-Item $work
     }
 
     Write-Host "Signed $file as $($sig.SignerCertificate.Subject), timestamped by $($sig.TimeStamperCertificate.Subject)"
