@@ -131,6 +131,7 @@ type fakeRegistry struct {
 
 func (f *fakeRegistry) GatewayList() ([]string, error)     { return f.gateways, nil }
 func (f *fakeRegistry) SetGatewayList(v []string) error    { f.gateways = v; return nil }
+func (f *fakeRegistry) String(name string) (string, error) { return f.strings[name], nil }
 func (f *fakeRegistry) SetString(name, value string) error { f.strings[name] = value; return nil }
 
 func TestLaunch(t *testing.T) {
@@ -170,6 +171,73 @@ func TestLaunch(t *testing.T) {
 	l.Launch(context.Background(), base, server, p, Choices{}, 0)
 	if want := filepath.Join(server, "Save") + string(filepath.Separator); reg.strings["Save Path"] != want {
 		t.Errorf("Save Path = %q, want %q", reg.strings["Save Path"], want)
+	}
+
+	// A shared server launched next doesn't keep the isolated folder.
+	l.Launch(context.Background(), base, server, profile(), Choices{}, 0)
+	if want := filepath.Join(base, "Save") + string(filepath.Separator); reg.strings["Save Path"] != want {
+		t.Errorf("Save Path = %q after an isolated server, want the shared %q", reg.strings["Save Path"], want)
+	}
+}
+
+func TestLaunchKeepsPlayersSavePath(t *testing.T) {
+	base := t.TempDir()
+	server := filepath.Join(base, "slashdiablo")
+	os.MkdirAll(server, 0o755)
+	os.WriteFile(filepath.Join(server, "Game.exe"), []byte("exe"), 0o644)
+
+	own := `D:\My Saves\`
+	reg := &fakeRegistry{strings: map[string]string{"Save Path": own}}
+	l := New(reg, func(Box) error { return nil })
+
+	if err := l.Launch(context.Background(), base, server, profile(), Choices{}, 0); err != nil {
+		t.Fatal(err)
+	}
+	if reg.strings["Save Path"] != own {
+		t.Errorf("Save Path = %q, want the player's own %q kept", reg.strings["Save Path"], own)
+	}
+}
+
+func TestLaunchServerSetsItsOwnGateway(t *testing.T) {
+	base := t.TempDir()
+	server := filepath.Join(base, "slashdiablo")
+	os.MkdirAll(server, 0o755)
+	os.WriteFile(filepath.Join(server, "Game.exe"), []byte("exe"), 0o644)
+
+	reg := &fakeRegistry{strings: map[string]string{}}
+	l := New(reg, func(Box) error { return nil })
+
+	p := profile()
+	off := false
+	p.Launch.SetGateways = &off
+	if err := l.Launch(context.Background(), base, server, p, Choices{}, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	if reg.gateways != nil {
+		t.Errorf("gateways written: %q", reg.gateways)
+	}
+	if _, ok := reg.strings["BNETIP"]; ok {
+		t.Error("BNETIP written")
+	}
+	if _, ok := reg.strings["Preferred Realm"]; ok {
+		t.Error("Preferred Realm written")
+	}
+}
+
+func TestIsolatedSavePath(t *testing.T) {
+	base := filepath.Join("C:", "Games", "Diablo II")
+	for path, want := range map[string]bool{
+		filepath.Join(base, "slashdiablo", "Save") + string(filepath.Separator): true,
+		filepath.Join(base, "SlashDiablo", "save"):                              true,
+		filepath.Join(base, "Save"):                                             false,
+		filepath.Join(base, "slashdiablo", "Saves"):                             false,
+		filepath.Join("D:", "slashdiablo", "Save"):                              false,
+		filepath.Join(base, "a b", "Save"):                                      false,
+	} {
+		if got := isolatedSavePath(base, path); got != want {
+			t.Errorf("isolatedSavePath(%q) = %v, want %v", path, got, want)
+		}
 	}
 }
 

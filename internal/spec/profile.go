@@ -138,6 +138,15 @@ type Launch struct {
 	DefaultFlags []string `json:"defaultFlags,omitempty"`
 	AllowedFlags []string `json:"allowedFlags,omitempty"`
 	MaxInstances int      `json:"maxInstances,omitempty"`
+	// SetGateways is false for a server whose own game code sets the
+	// gateway, so the launcher leaves the Battle.net registry values alone.
+	SetGateways *bool `json:"setGateways,omitempty"`
+}
+
+// SetsGateways reports whether the launcher writes the gateway registry
+// values at launch. It defaults to true.
+func (l Launch) SetsGateways() bool {
+	return l.SetGateways == nil || *l.SetGateways
 }
 
 // ExePath is the executable to start, defaulting to Game.exe.
