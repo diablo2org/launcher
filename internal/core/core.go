@@ -847,6 +847,27 @@ func (m *Manager) Status(ctx context.Context, id string) Status {
 	}
 }
 
+// Verify checks every file in a server's folder against its manifests,
+// hashing each one again rather than trusting the remembered hashes, and
+// reports what an update would repair. Files the player owns ("once" files
+// and custom components) are left out, as they are for an update.
+func (m *Manager) Verify(ctx context.Context, id string) Status {
+	m.mu.Lock()
+	busy := m.busy[id]
+	m.mu.Unlock()
+	if busy {
+		return Status{Error: "already updating"}
+	}
+
+	// An emptied cache makes the plan hash every file; Status then saves the
+	// fresh hashes.
+	if err := m.store.WriteCache(id, "hashes.json", []byte("{}")); err != nil {
+		return Status{Error: err.Error()}
+	}
+
+	return m.Status(ctx, id)
+}
+
 // ErrNeedsCopy means the base archives can't be hard linked into the server
 // folder and would need copying, which uses real disk space. The player is
 // asked, and Update is called again with allowCopy.

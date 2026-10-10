@@ -147,6 +147,21 @@ func (s *ServerService) Status(ctx context.Context, id string) core.Status {
 	return s.m.Status(ctx, id)
 }
 
+// Verify hashes every file in a server's folder again and reports what an
+// update would repair.
+func (s *ServerService) Verify(ctx context.Context, id string) core.Status {
+	slog.Info("verify", "server", id)
+	st := s.m.Verify(ctx, id)
+	switch {
+	case st.Error != "":
+		slog.Error("verify", "server", id, "err", logs.RedactURLs(st.Error))
+	case !st.UpToDate:
+		slog.Info("verify found files to repair", "server", id, "files", st.UpdateFiles, "bytes", st.UpdateBytes)
+	}
+
+	return st
+}
+
 // UpdateProgress is sent as the "update:progress" event while updating.
 type UpdateProgress struct {
 	Server   string        `json:"server"`

@@ -74,6 +74,18 @@
     });
   }
 
+  let verifyResult = $state("");
+
+  async function verify() {
+    verifyResult = "";
+    error = "";
+    try {
+      verifyResult = await data!.verify();
+    } catch (err) {
+      error = errorText(err);
+    }
+  }
+
   const maxBoxes = $derived(Math.max(1, profile?.launch?.maxInstances ?? 1));
   const d2glOn = $derived((profile?.components ?? []).some((c) => c.kind === "d2gl" && (data?.choices?.components ?? {})[c.id]));
 
@@ -337,8 +349,26 @@
         {/each}
 
         {#if !(profile.components ?? []).length && maxBoxes <= 1 && !gameSettings.length}
-          <p class="py-4 text-[12px] text-muted">{profile.name} has no game options.</p>
+          <p class="border-b border-line py-4 text-[12px] text-muted">{profile.name} has no game options.</p>
         {/if}
+
+        <div class="flex items-center gap-4 py-4">
+          {@render row(
+            "Verify files",
+            verifyResult ||
+              (data.status?.installed
+                ? `Check every file against ${profile.name}'s and repair any that differ. Your own settings files and custom components are left alone.`
+                : `Install ${profile.name} first.`),
+            !data.status?.installed,
+          )}
+          <button
+            class="title rounded-[3px] border border-edge px-4 py-2 text-[12px] hover:border-muted disabled:opacity-45 disabled:hover:border-edge"
+            disabled={!data.status?.installed || data.busy !== ""}
+            onclick={verify}
+          >
+            {data.busy === "verifying" ? "Verifying…" : data.busy === "updating" ? "Repairing…" : "Verify"}
+          </button>
+        </div>
       {:else}
         {#each groups.find(([n]) => n === tab)?.[1] ?? [] as v (v.setting.id)}
           {@render settingRow(v)}

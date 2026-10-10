@@ -22,6 +22,7 @@
   // The one line of text beside the button.
   const message = $derived.by(() => {
     if (!app.baseReady) return "Choose your Diablo II folder in settings";
+    if (data.busy === "verifying") return "Verifying files…";
     if (data.busy === "updating") return data.progress?.file ? `Updating ${data.progress.file}` : "Updating…";
     if (data.launched) return `${profile?.name ?? "Game"} started`;
     if (!status) return data.checking ? "Checking files…" : "";
@@ -122,6 +123,8 @@
             Updating…
           {:else if data.busy === "launching"}
             Starting…
+          {:else if data.busy === "verifying"}
+            Verifying…
           {:else}
             {action?.label ?? "…"}
           {/if}

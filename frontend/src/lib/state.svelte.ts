@@ -50,7 +50,7 @@ export class ServerData {
   settings = $state<SettingValue[]>([]);
 
   checking = $state(false);
-  busy = $state<"" | "updating" | "launching">("");
+  busy = $state<"" | "updating" | "launching" | "verifying">("");
   progress = $state<{ done: number; total: number; file: string } | null>(null);
   error = $state("");
   newsError = $state("");
@@ -114,6 +114,28 @@ export class ServerData {
       this.progress = null;
       await this.refresh();
     }
+  }
+
+  // Hashes every file again, then repairs any that differ. Returns what it
+  // found, for the player.
+  async verify(): Promise<string> {
+    this.error = "";
+    this.busy = "verifying";
+    let status: Status;
+    try {
+      status = await ServerService.Verify(this.id);
+    } finally {
+      this.busy = "";
+    }
+    this.status = status;
+
+    if (status.error) return status.error;
+    if (status.upToDate) return "Every file is correct.";
+
+    const n = status.updateFiles;
+    await this.update();
+    if (this.error || this.copyBytes > 0) return `${n} ${n === 1 ? "file needs" : "files need"} repairing; see the launch page.`;
+    return `Repaired ${n} ${n === 1 ? "file" : "files"}.`;
   }
 
   async play() {
