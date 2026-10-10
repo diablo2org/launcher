@@ -309,6 +309,21 @@
         }
       }
     },
+    "report": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "files": {
+          "description": "Files in the server folder to add to a bug report, such as the server's own logs. * and ? match within the file name only. The player sees the list before saving a report.",
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/filePattern"
+          }
+        }
+      }
+    },
     "news": {
       "$ref": "#/$defs/httpsUrl"
     },
@@ -344,6 +359,26 @@
           },
           {
             "pattern": "(^|/)\\.\\.?(/|$)"
+          }
+        ]
+      }
+    },
+    "filePattern": {
+      "description": "A relativePath whose last segment may use * and ?. The launcher also requires a letter or digit in the file name; see SPEC section 3.1.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240,
+      "pattern": "^[^\\\\:\"<>|\\[\\]]+$",
+      "not": {
+        "anyOf": [
+          {
+            "pattern": "^/"
+          },
+          {
+            "pattern": "(^|/)\\.\\.?(/|$)"
+          },
+          {
+            "pattern": "[*?][^/]*/"
           }
         ]
       }

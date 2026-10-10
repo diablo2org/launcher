@@ -1,6 +1,6 @@
 // Package report builds a bug report: a zip of the launcher's logs, crash
-// traces and state, with the game's own crash logs, that a player can attach
-// when asking for help. It is only ever saved where the player chooses;
+// traces and state, with the game's own crash logs and any files a server
+// asks for, that a player can attach when asking for help. It is only ever saved where the player chooses;
 // nothing is sent anywhere.
 package report
 
@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/diablo2org/launcher/internal/install"
 	"github.com/diablo2org/launcher/internal/logs"
+	"github.com/diablo2org/launcher/internal/paths"
 )
 
 // maxFile is the most taken from any one file. Logs are capped well below
@@ -31,6 +33,14 @@ var serverID = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,31}$`)
 // newest first.
 const gameCrashes = 5
 
+// perPattern is how many files one of a server's report patterns takes, the
+// newest first.
+const perPattern = 10
+
+// serverBudget caps what a server's own patterns add to a report, counted
+// after the per-file cap.
+const serverBudget = 16 << 20
+
 // Input is where a report's contents come from.
 type Input struct {
 	// DataDir is the launcher's data folder: logs and state.json.
@@ -39,6 +49,8 @@ type Input struct {
 	Base string
 	// Servers are the ids of servers that may have a folder.
 	Servers []string
+	// Files are the report patterns each server's profile declares, by id.
+	Files map[string][]string
 	// About is a few lines on the launcher and system, written first.
 	About string
 	// Home is replaced by %USERPROFILE% in every text file, so the report
@@ -54,8 +66,10 @@ type Item struct {
 	What string `json:"what"`
 	Size int64  `json:"size"`
 
-	source string
-	data   []byte
+	// root and rel locate the file; the read never leaves root.
+	root string
+	rel  string
+	data []byte
 }
 
 // Collect lists what a report would hold, without reading the files, so the
@@ -70,11 +84,7 @@ func Collect(in Input) []Item {
 		if err != nil || !info.Mode().IsRegular() || info.Size() == 0 {
 			return
 		}
-		size := info.Size()
-		if size > maxFile {
-			size = maxFile
-		}
-		items = append(items, Item{Name: name, What: what, Size: size, source: source})
+		items = append(items, Item{Name: name, What: what, Size: capped(info.Size()), root: filepath.Dir(source), rel: filepath.Base(source)})
 	}
 
 	logDir := logs.Dir(in.DataDir)
@@ -94,13 +104,125 @@ func Collect(in Input) []Item {
 			if !serverID.MatchString(id) {
 				continue
 			}
-			for _, f := range gameCrashLogs(install.ServerDir(in.Base, id)) {
+			dir := install.ServerDir(in.Base, id)
+			taken := map[string]bool{}
+			for _, f := range gameCrashLogs(dir) {
+				taken[strings.ToLower(filepath.Base(f))] = true
 				add("game/"+id+"/"+filepath.Base(f), "Diablo II crash log", f)
 			}
+			items = append(items, serverFiles(id, dir, in.Files[id], taken)...)
 		}
 	}
 
 	return items
+}
+
+// serverFiles finds the files a server's report patterns match, newest first
+// per pattern, skipping any already taken. It looks through an os.Root, so
+// a linked folder can't lead outside the server folder.
+func serverFiles(id, dir string, patterns []string, taken map[string]bool) []Item {
+	if len(patterns) == 0 {
+		return nil
+	}
+
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return nil
+	}
+	defer root.Close()
+
+	var items []Item
+	var total int64
+	for _, pattern := range patterns {
+		// The profile was checked when it was loaded; this guards the
+		// filesystem against a pattern that somehow wasn't.
+		if paths.CheckPattern(pattern) != nil {
+			continue
+		}
+
+		sub, name := path.Split(pattern)
+		for _, rel := range matchNewest(root, strings.TrimSuffix(sub, "/"), name) {
+			key := strings.ToLower(rel)
+			if taken[key] {
+				continue
+			}
+			info, err := root.Lstat(rel)
+			if err != nil || !info.Mode().IsRegular() || info.Size() == 0 {
+				continue
+			}
+			size := capped(info.Size())
+			if total+size > serverBudget {
+				continue
+			}
+
+			taken[key] = true
+			total += size
+			items = append(items, Item{Name: "game/" + id + "/" + rel, What: "Asked for by the server", Size: size, root: dir, rel: filepath.FromSlash(rel)})
+		}
+	}
+
+	return items
+}
+
+// matchNewest lists the regular files in sub, a folder under root, whose
+// names match pattern without regard to case, newest first, up to
+// perPattern. The paths returned are relative to root, with forward slashes.
+func matchNewest(root *os.Root, sub, pattern string) []string {
+	folder := "."
+	if sub != "" {
+		folder = sub
+	}
+
+	f, err := root.Open(folder)
+	if err != nil {
+		return nil
+	}
+	entries, err := f.ReadDir(-1)
+	f.Close()
+	if err != nil {
+		return nil
+	}
+
+	type found struct {
+		rel string
+		mod time.Time
+	}
+	var all []found
+	pattern = strings.ToLower(pattern)
+	for _, e := range entries {
+		if !e.Type().IsRegular() {
+			continue
+		}
+		if ok, _ := path.Match(pattern, strings.ToLower(e.Name())); !ok {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		all = append(all, found{path.Join(sub, e.Name()), info.ModTime()})
+	}
+
+	sort.Slice(all, func(i, j int) bool { return all[i].mod.After(all[j].mod) })
+	if len(all) > perPattern {
+		all = all[:perPattern]
+	}
+
+	rels := make([]string, len(all))
+	for i, f := range all {
+		rels[i] = f.rel
+	}
+
+	return rels
+}
+
+// capped is how much of a file of size bytes a report takes.
+func capped(size int64) int64 {
+	if size > maxFile {
+		return maxFile
+	}
+
+	return size
 }
 
 // gameCrashLogs finds the newest of the logs Diablo II writes when it
@@ -164,9 +286,9 @@ func Write(w io.Writer, items []Item, home string) error {
 
 	for _, it := range items {
 		data := it.data
-		if it.source != "" {
+		if it.root != "" {
 			var err error
-			data, err = readCapped(it.source)
+			data, err = readCapped(it.root, it.rel)
 			if err != nil {
 				data = []byte(fmt.Sprintf("couldn't read this file: %v\n", err))
 			}
@@ -189,11 +311,10 @@ func Write(w io.Writer, items []Item, home string) error {
 }
 
 // readCapped reads the end of a file, up to maxFile: the newest part of a log
-// is what matters. It opens the file within its own folder, so even if it has
-// been swapped for a link since it was listed, the read can't leave that
-// folder.
-func readCapped(path string) ([]byte, error) {
-	f, err := os.OpenInRoot(filepath.Dir(path), filepath.Base(path))
+// is what matters. It opens the file within root, so even if it has been
+// swapped for a link since it was listed, the read can't leave that folder.
+func readCapped(root, rel string) ([]byte, error) {
+	f, err := os.OpenInRoot(root, rel)
 	if err != nil {
 		return nil, err
 	}

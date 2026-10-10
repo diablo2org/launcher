@@ -24,6 +24,7 @@ type Profile struct {
 	Components  []Component `json:"components,omitempty"`
 	Settings    []Setting   `json:"settings,omitempty"`
 	Launch      Launch      `json:"launch,omitempty"`
+	Report      Report      `json:"report,omitempty"`
 	News        string      `json:"news,omitempty"`
 	Ladder      string      `json:"ladder,omitempty"`
 }
@@ -151,6 +152,14 @@ func (l Launch) SetsGateways() bool {
 	return l.SetGateways == nil || *l.SetGateways
 }
 
+// Report is what the server wants in a bug report beyond the launcher's own
+// logs and the game's crash logs.
+type Report struct {
+	// Files are patterns for files in the server folder, such as the logs
+	// the server's own game code writes.
+	Files []string `json:"files,omitempty"`
+}
+
 // ExePath is the executable to start, defaulting to Game.exe.
 func (l Launch) ExePath() string {
 	if l.Exe == "" {
@@ -249,6 +258,12 @@ func (p *Profile) check() error {
 
 	if err := paths.Check(p.Launch.ExePath()); err != nil {
 		problems.add("launch.exe: %v", err)
+	}
+
+	for _, f := range p.Report.Files {
+		if err := paths.CheckPattern(f); err != nil {
+			problems.add("report.files: %v", err)
+		}
 	}
 
 	settings := make(map[string]bool, len(p.Settings))

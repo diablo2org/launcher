@@ -3,6 +3,7 @@ package report
 import (
 	"archive/zip"
 	"bytes"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -94,7 +95,7 @@ func TestReadCappedKeepsTheEnd(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "big.log")
 	write(t, path, strings.Repeat("a", maxFile)+"newest")
 
-	data, err := readCapped(path)
+	data, err := readCapped(filepath.Dir(path), filepath.Base(path))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,7 +170,128 @@ func TestCrashLogLinksIgnored(t *testing.T) {
 		}
 	}
 
-	if _, err := readCapped(link); err == nil {
+	if _, err := readCapped(dir, "D2260101.txt"); err == nil {
 		t.Error("read followed a link out of its folder")
+	}
+}
+
+func TestServerFiles(t *testing.T) {
+	root := t.TempDir()
+	base := filepath.Join(root, "Diablo II")
+	dir := install.ServerDir(base, "ok")
+
+	for i := 1; i <= 12; i++ {
+		f := filepath.Join(dir, fmt.Sprintf("Mod_Debug.w%d.log", i))
+		write(t, f, "log")
+		mod := time.Now().Add(time.Duration(i) * time.Minute)
+		os.Chtimes(f, mod, mod)
+	}
+	write(t, filepath.Join(dir, "version.txt"), "build 7")
+	write(t, filepath.Join(dir, "logs", "net.log"), "net")
+	write(t, filepath.Join(dir, "D2260101.txt"), "crash")
+	write(t, filepath.Join(dir, "Mod.dll"), "code")
+
+	items := Collect(Input{
+		DataDir: filepath.Join(root, "data"),
+		Base:    base,
+		Servers: []string{"ok", "other"},
+		Files: map[string][]string{
+			"ok":    {"mod_debug*.log", "VERSION.TXT", "logs/*.log", "D2*.txt", "missing.txt"},
+			"other": {"*.log"},
+		},
+	})
+
+	got := map[string]string{}
+	for _, it := range items {
+		got[it.Name] = it.What
+	}
+
+	// Ten newest per pattern, matched without regard to case.
+	for i := 3; i <= 12; i++ {
+		if got[fmt.Sprintf("game/ok/Mod_Debug.w%d.log", i)] != "Asked for by the server" {
+			t.Errorf("w%d log missing: %v", i, got)
+		}
+	}
+	if _, ok := got["game/ok/Mod_Debug.w1.log"]; ok {
+		t.Error("more than ten files taken for one pattern")
+	}
+	if _, ok := got["game/ok/version.txt"]; !ok {
+		t.Error("version.txt missing")
+	}
+	if _, ok := got["game/ok/logs/net.log"]; !ok {
+		t.Error("file in a subfolder missing")
+	}
+	// A crash log the report takes anyway is listed once, as a crash log.
+	if got["game/ok/D2260101.txt"] != "Diablo II crash log" {
+		t.Errorf("crash log = %q", got["game/ok/D2260101.txt"])
+	}
+	if _, ok := got["game/ok/Mod.dll"]; ok {
+		t.Error("unmatched file taken")
+	}
+
+	var buf bytes.Buffer
+	if err := Write(&buf, items, ""); err != nil {
+		t.Fatal(err)
+	}
+	z, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range z.File {
+		if f.Name != "game/ok/logs/net.log" {
+			continue
+		}
+		r, _ := f.Open()
+		body, _ := io.ReadAll(r)
+		r.Close()
+		if string(body) != "net" {
+			t.Errorf("net.log = %q", body)
+		}
+	}
+}
+
+func TestServerFilesBudget(t *testing.T) {
+	root := t.TempDir()
+	base := filepath.Join(root, "Diablo II")
+	dir := install.ServerDir(base, "ok")
+
+	// Each file is cut to maxFile, so nine of them overrun the budget.
+	big := strings.Repeat("a", maxFile+10)
+	for i := 1; i <= 9; i++ {
+		write(t, filepath.Join(dir, fmt.Sprintf("big%d.log", i)), big)
+	}
+
+	items := Collect(Input{DataDir: filepath.Join(root, "data"), Base: base, Servers: []string{"ok"}, Files: map[string][]string{"ok": {"big*.log"}}})
+
+	var total int64
+	n := 0
+	for _, it := range items {
+		if strings.HasPrefix(it.Name, "game/") {
+			total += it.Size
+			n++
+		}
+	}
+	if total > serverBudget || n != serverBudget/maxFile {
+		t.Errorf("took %d files, %d bytes", n, total)
+	}
+}
+
+// A pattern can't reach outside the server folder through a linked folder.
+func TestServerFilesStayInFolder(t *testing.T) {
+	root := t.TempDir()
+	base := filepath.Join(root, "Diablo II")
+	write(t, filepath.Join(root, "outside", "secret.log"), "not for the report")
+
+	dir := install.ServerDir(base, "ok")
+	os.MkdirAll(dir, 0o755)
+	if err := os.Symlink(filepath.Join(root, "outside"), filepath.Join(dir, "logs")); err != nil {
+		t.Skipf("can't make a symlink here: %v", err)
+	}
+
+	items := Collect(Input{DataDir: filepath.Join(root, "data"), Base: base, Servers: []string{"ok"}, Files: map[string][]string{"ok": {"logs/*.log", "../outside/*.log"}}})
+	for _, it := range items {
+		if strings.HasPrefix(it.Name, "game/") {
+			t.Errorf("collected %s", it.Name)
+		}
 	}
 }

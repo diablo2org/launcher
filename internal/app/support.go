@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -97,6 +98,15 @@ func (s *SupportService) input() report.Input {
 			in.Servers = append(in.Servers, id)
 		}
 		sort.Strings(in.Servers)
+	}
+
+	// A server whose profile can't be loaded, offline say, just adds none of
+	// its own files.
+	in.Files = map[string][]string{}
+	for _, id := range in.Servers {
+		if p, err := s.m.Profile(context.Background(), id); err == nil && len(p.Report.Files) > 0 {
+			in.Files[id] = p.Report.Files
+		}
 	}
 
 	var about strings.Builder

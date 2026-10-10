@@ -176,6 +176,14 @@ can't be changed.
   `Preferred Realm`, which the game uses to pick the realm on login.
 - **`channels`**: at least one. The first is the default. Players can switch
   channel per server.
+- **`report.files`**: up to 16 patterns for files in the server folder to
+  add to a bug report, such as logs the server's own game code writes. Paths
+  follow the rules in section 4; `*` and `?` match within the last segment
+  only, which must also contain a letter or digit, so `logs/*` is refused.
+  Matching ignores case. Each pattern takes its 10 newest matches, each file
+  is cut to its last 2 MB, and a server's patterns add at most 16 MB in all.
+  Links are never followed out of the server folder. The player sees every
+  file before saving a report.
 - **`news`**: a [JSON Feed 1.1](https://www.jsonfeed.org/version/1.1/). See
   3.2.
 - **`ladder`**: a ladder document. See 3.3.
