@@ -1,4 +1,5 @@
 <script lang="ts">
+  import AddLinkModal from "./lib/AddLinkModal.svelte";
   import Catalog from "./lib/Catalog.svelte";
   import LadderView from "./lib/LadderView.svelte";
   import LaunchView from "./lib/LaunchView.svelte";
@@ -87,5 +88,9 @@
 
   {#if app.settingsOpen}
     <SettingsModal />
+  {/if}
+
+  {#if app.link}
+    <AddLinkModal />
   {/if}
 </div>

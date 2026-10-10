@@ -19,8 +19,8 @@ install, which is otherwise never modified.
 
 Working end to end against a local test server: install, update, components
 (maphack, D2GL), declarative settings, news, ladder, multibox with D2GL box
-profiles, pinned servers, adding servers by URL, and bringing across the old
-SlashDiablo launcher's settings. Not yet tried against a real server, and
+profiles, pinned servers, adding servers by URL or a `diablo2org://add` link,
+and bringing across the old SlashDiablo launcher's settings. Not yet tried against a real server, and
 Play has only been tested in unit tests so far.
 
 | Phase | |

@@ -1,17 +1,22 @@
 package main
 
 import (
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"log"
 	"log/slog"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/events"
 
 	"github.com/diablo2org/launcher/internal/app"
 	"github.com/diablo2org/launcher/internal/core"
@@ -102,6 +107,7 @@ func main() {
 	}
 
 	var a *application.App
+	var window *application.WebviewWindow
 	host := app.Host{
 		Updates: updatesClient(clientOpts),
 		// The installer runs on its own, shown to the player, and replaces
@@ -120,6 +126,13 @@ func main() {
 				PromptForSingleSelection()
 		},
 		Emit: func(name string, data any) { a.Event.Emit(name, data) },
+		Focus: func() {
+			if window != nil {
+				window.UnMinimise()
+				window.Show()
+				window.Focus()
+			}
+		},
 		PickFolder: func(title string) (string, error) {
 			return a.Dialog.OpenFile().
 				SetTitle(title).
@@ -129,11 +142,13 @@ func main() {
 		},
 	}
 
+	servers := app.NewServerService(manager, host)
+
 	a = application.New(application.Options{
 		Name:        "Launcher",
 		Description: "Launcher for Diablo II private servers",
 		Services: []application.Service{
-			application.NewService(app.NewServerService(manager, host)),
+			application.NewService(servers),
 			application.NewService(app.NewProfileService(exampleProfile)),
 			application.NewService(app.NewSupportService(st, manager, host)),
 		},
@@ -147,9 +162,21 @@ func main() {
 		Mac: application.MacOptions{
 			ApplicationShouldTerminateAfterLastWindowClosed: true,
 		},
+		// A second launch, such as a clicked diablo2org:// link while the
+		// launcher is open, hands its arguments to this one and exits.
+		SingleInstance: &application.SingleInstanceOptions{
+			UniqueID: instanceID(),
+			OnSecondInstanceLaunch: func(data application.SecondInstanceData) {
+				if link := app.LinkArg(data.Args); link != "" {
+					app.HandleLink(servers, link, true)
+				} else {
+					host.Focus()
+				}
+			},
+		},
 	})
 
-	a.Window.NewWithOptions(application.WebviewWindowOptions{
+	window = a.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title: "Launcher",
 		// The old launcher's 1024x600, plus the server rail.
 		Width:     1100,
@@ -165,9 +192,36 @@ func main() {
 		URL:     "/",
 	})
 
+	// A link the launcher was started with waits for the frontend to load.
+	// macOS hands links over as an event instead; on Windows that event
+	// repeats the argument, so it's only used on macOS.
+	app.HandleLink(servers, app.LinkArg(os.Args[1:]), false)
+	if runtime.GOOS == "darwin" {
+		a.Event.OnApplicationEvent(events.Common.ApplicationLaunchedWithUrl, func(e *application.ApplicationEvent) {
+			app.HandleLink(servers, e.Context().URL(), true)
+		})
+	}
+
 	if err := a.Run(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// instanceID names the running launcher for single-instance. A test run with
+// its own data folder gets its own, so it can run beside the player's.
+func instanceID() string {
+	const id = "org.diablo2.launcher"
+
+	dir := os.Getenv(envData)
+	if dir == "" {
+		return id
+	}
+	if abs, err := filepath.Abs(dir); err == nil {
+		dir = abs
+	}
+	sum := sha256.Sum256([]byte(strings.ToLower(dir)))
+
+	return id + "." + hex.EncodeToString(sum[:4])
 }
 
 // updatesClient fetches launcher releases from GitHub, or from the server in

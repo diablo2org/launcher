@@ -350,7 +350,9 @@ func (m *Manager) Servers(ctx context.Context) ([]ServerInfo, error) {
 var ErrAlreadyListed = errors.New("this server is already listed; open it from All servers")
 
 // AddServer adds a server that isn't in the listing, from the URL of its
-// profile. Such servers haven't been reviewed and show as not verified.
+// profile. Such servers haven't been reviewed and show as not verified. For a
+// server that is already listed it returns the profile with ErrAlreadyListed,
+// so the caller can open that server instead.
 func (m *Manager) AddServer(ctx context.Context, profileURL string) (*spec.Profile, error) {
 	u, err := url.Parse(strings.TrimSpace(profileURL))
 	if err != nil || u.Scheme != "https" || u.Hostname() == "" {
@@ -371,7 +373,7 @@ func (m *Manager) AddServer(ctx context.Context, profileURL string) (*spec.Profi
 	defer m.mu.Unlock()
 
 	if e := m.entries[p.ID]; e != nil && e.listed {
-		return nil, ErrAlreadyListed
+		return p, ErrAlreadyListed
 	}
 
 	srv := m.state.Server(p.ID)
