@@ -74,9 +74,21 @@ ManifestDPIAware true
 
 !insertmacro MUI_LANGUAGE "English" # Set the Language of the installer
 
-## The following two statements can be used to sign the installer and the uninstaller. The path to the binaries are provided in %1
-#!uninstfinalize 'signtool --file "%1"'
-#!finalize 'signtool --file "%1"'
+# Release builds are signed: the launcher before it goes in, then the
+# uninstaller and this installer as they're written. CI sets LAUNCHER_SIGN on
+# tagged builds only, as each signing counts against the eSigner plan; see
+# ../sign.ps1. An unset variable stays as the literal text, so isn't "true".
+!if "$%LAUNCHER_SIGN%" == "true"
+    !define SIGN 'pwsh -NoProfile -NonInteractive -File "${__FILEDIR__}\..\sign.ps1"'
+    !ifdef ARG_WAILS_AMD64_BINARY
+        !system '${SIGN} "${ARG_WAILS_AMD64_BINARY}"' = 0
+    !endif
+    !ifdef ARG_WAILS_ARM64_BINARY
+        !system '${SIGN} "${ARG_WAILS_ARM64_BINARY}"' = 0
+    !endif
+    !uninstfinalize '${SIGN} "%1"' = 0
+    !finalize '${SIGN} "%1"' = 0
+!endif
 
 Name "${INFO_PRODUCTNAME}"
 OutFile "..\..\..\bin\${INFO_PROJECTNAME}-${ARCH}-installer.exe" # Name of the installer's file.
