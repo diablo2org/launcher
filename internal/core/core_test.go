@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -462,6 +463,70 @@ func TestVerifyReleasesServerOnError(t *testing.T) {
 				t.Error("Verify left the server busy after an error")
 			}
 		})
+	}
+}
+
+// signAll publishes a signature beside every manifest on the site.
+func (s *site) signAll(key ed25519.PrivateKey) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for path, body := range s.files {
+		if strings.HasSuffix(path, ".json") {
+			s.files[path+".sig"] = spec.SignManifest(body, key)
+		}
+	}
+}
+
+func TestSignedManifests(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	pub, key, _ := ed25519.GenerateKey(nil)
+	h.profile["signing"] = map[string]interface{}{"keys": []string{spec.FormatPublicKey(pub)}}
+	h.list(t)
+	h.site.signAll(key)
+	h.m.Servers(ctx)
+
+	if err := h.m.Update(ctx, "slash", false, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	// A web host serving a changed manifest, without the key to sign it,
+	// gets nowhere: nothing from it is downloaded.
+	evil := h.site.file("evil", "Game.exe", "not the server's game")
+	h.site.json("/live.json", spec.Manifest{Schema: 1, Server: "slash", Version: "2", Files: []spec.File{evil}})
+	if st := h.m.Status(ctx, "slash"); !strings.Contains(st.Error, "signature") {
+		t.Errorf("changed manifest: %+v", st)
+	}
+	if err := h.m.Update(ctx, "slash", false, nil); !errors.Is(err, spec.ErrSignature) {
+		t.Errorf("update with a changed manifest: %v", err)
+	}
+	if h.read(t, "Game.exe") != "game 1.13c" {
+		t.Error("files from an unsigned manifest were installed")
+	}
+
+	// Signed with the key, the new manifest is used.
+	h.site.signAll(key)
+	if err := h.m.Update(ctx, "slash", false, nil); err != nil {
+		t.Fatal(err)
+	}
+	if h.read(t, "Game.exe") != "not the server's game" {
+		t.Error("signed update not installed")
+	}
+
+	// Offline, the last verified copy is used, and checked again against the
+	// profile's keys: after a change of key, the old copy no longer counts.
+	h.site.mu.Lock()
+	h.site.down = true
+	h.site.mu.Unlock()
+	if st := h.m.Status(ctx, "slash"); st.Error != "" || !st.UpToDate {
+		t.Errorf("offline with a signed cache: %+v", st)
+	}
+	newPub, _, _ := ed25519.GenerateKey(nil)
+	h.profile["signing"] = map[string]interface{}{"keys": []string{spec.FormatPublicKey(newPub)}}
+	h.list(t)
+	h.m.Servers(ctx)
+	if st := h.m.Status(ctx, "slash"); !strings.Contains(st.Error, "signature") {
+		t.Errorf("offline cache after a key change: %+v", st)
 	}
 }
 

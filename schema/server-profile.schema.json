@@ -314,6 +314,25 @@
     },
     "ladder": {
       "$ref": "#/$defs/httpsUrl"
+    },
+    "signing": {
+      "description": "Keys the server signs its manifests with. When given, the launcher only uses a manifest with a valid signature from one of them. See SPEC section 4.2.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["keys"],
+      "properties": {
+        "keys": {
+          "description": "Ed25519 public keys, base64. More than one lets a server move to a new key.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9+/]{43}=$"
+          }
+        }
+      }
     }
   },
   "$defs": {

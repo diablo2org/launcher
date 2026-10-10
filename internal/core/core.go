@@ -577,19 +577,71 @@ func componentManifestURL(p *spec.Profile, comp, version string) (string, error)
 // and so an installed server still plays offline.
 func (m *Manager) manifest(ctx context.Context, id string, p *spec.Profile, rawURL string) (*spec.Manifest, error) {
 	name := cacheName("manifest", rawURL)
+	sigName := cacheName("manifest-sig", rawURL)
 
-	data, fetchErr := m.client(p.Hosts).Document(ctx, rawURL)
-	if fetchErr != nil {
-		cached, err := m.store.ReadCache(id, name)
-		if err != nil || cached == nil {
-			return nil, fetchErr
-		}
-		data = cached
-	} else if err := m.store.WriteCache(id, name, data); err != nil {
+	keys, err := p.ManifestKeys()
+	if err != nil {
 		return nil, err
 	}
 
+	data, sig, fetchErr := m.fetchManifest(ctx, p, rawURL, keys != nil)
+	cached := false
+	if fetchErr != nil {
+		data, err = m.store.ReadCache(id, name)
+		if err != nil || data == nil {
+			return nil, fetchErr
+		}
+		if keys != nil {
+			if sig, err = m.store.ReadCache(id, sigName); err != nil || sig == nil {
+				return nil, fetchErr
+			}
+		}
+		cached = true
+	}
+
+	// A signed server's manifest is only used, or kept for offline use,
+	// with a signature from one of its keys. A cached one is checked again,
+	// as the profile's keys may have changed since.
+	if keys != nil {
+		if err := spec.VerifyManifest(data, sig, keys); err != nil {
+			return nil, fmt.Errorf("%s: %w; the update was stopped so no files from it are used. Tell %s's team if this keeps happening", rawURL, err, p.Name)
+		}
+	}
+
+	if !cached {
+		if err := m.store.WriteCache(id, name, data); err != nil {
+			return nil, err
+		}
+		if keys != nil {
+			if err := m.store.WriteCache(id, sigName, sig); err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	return spec.ParseManifest(data, p)
+}
+
+// fetchManifest downloads a manifest, and its signature when the server signs
+// them.
+func (m *Manager) fetchManifest(ctx context.Context, p *spec.Profile, rawURL string, signed bool) (data, sig []byte, err error) {
+	c := m.client(p.Hosts)
+
+	data, err = c.Document(ctx, rawURL)
+	if err != nil || !signed {
+		return data, nil, err
+	}
+
+	sigURL, err := spec.SignatureURL(rawURL)
+	if err != nil {
+		return nil, nil, err
+	}
+	sig, err = c.Document(ctx, sigURL)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return data, sig, nil
 }
 
 // layers fetches the channel manifest and one per wanted component.

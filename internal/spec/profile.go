@@ -26,6 +26,7 @@ type Profile struct {
 	Launch      Launch      `json:"launch,omitempty"`
 	News        string      `json:"news,omitempty"`
 	Ladder      string      `json:"ladder,omitempty"`
+	Signing     *Signing    `json:"signing,omitempty"`
 }
 
 // Links are opened in the player's browser, as buttons on the server's launch
@@ -278,6 +279,10 @@ func (p *Profile) check() error {
 		if msg := s.checkDefault(); msg != "" {
 			problems.add("setting %q: %s", s.ID, msg)
 		}
+	}
+
+	if _, err := p.ManifestKeys(); err != nil {
+		problems.add("signing: %v", err)
 	}
 
 	return problems.err()
