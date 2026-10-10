@@ -315,7 +315,13 @@ func download(ctx context.Context, c *fetch.Client, path string, f spec.File, re
 		}
 	}
 
-	return fmt.Errorf("%s: %w", f.Path, errors.Join(errs...))
+	// Stopped by the player: say so, rather than only the last server error.
+	joined := errors.Join(errs...)
+	if err := ctx.Err(); err != nil && !errors.Is(joined, err) {
+		joined = errors.Join(err, joined)
+	}
+
+	return fmt.Errorf("%s: %w", f.Path, joined)
 }
 
 func sleep(ctx context.Context, d time.Duration) error {

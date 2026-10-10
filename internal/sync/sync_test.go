@@ -25,6 +25,8 @@ type fixture struct {
 	hits   map[string]int
 	// failing answers a path with 503 this many more times.
 	failing map[string]int
+	// failed, when set, is told each time a 503 is sent.
+	failed chan string
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -37,6 +39,9 @@ func newFixture(t *testing.T) *fixture {
 		if f.failing[r.URL.Path] > 0 {
 			f.failing[r.URL.Path]--
 			http.Error(w, "busy", http.StatusServiceUnavailable)
+			if f.failed != nil {
+				f.failed <- r.URL.Path
+			}
 			return
 		}
 		body, ok := f.served[r.URL.Path]
@@ -271,6 +276,7 @@ func TestRetriesThenNextMirror(t *testing.T) {
 
 func TestRetryStopsWhenCancelled(t *testing.T) {
 	f := newFixture(t)
+	f.failed = make(chan string, 1)
 
 	file := f.serve("Game.exe", "never", "")
 	f.failing["/Game.exe"] = 100
@@ -280,7 +286,10 @@ func TestRetryStopsWhenCancelled(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() { done <- Apply(ctx, f.client, f.dir, plan, nil, nil) }()
-	time.Sleep(100 * time.Millisecond)
+
+	// Cancel once the first try has failed, during the wait before the
+	// second, and require Apply to stop well before that wait would end.
+	<-f.failed
 	cancel()
 
 	select {
@@ -288,7 +297,7 @@ func TestRetryStopsWhenCancelled(t *testing.T) {
 		if !errors.Is(err, context.Canceled) {
 			t.Errorf("err = %v, want cancelled", err)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(retryWait / 2):
 		t.Fatal("cancel didn't stop the retry wait")
 	}
 }

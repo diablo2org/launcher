@@ -97,6 +97,25 @@ func TestRedirectErrorHidesQuery(t *testing.T) {
 	}
 }
 
+func TestBadURLHidesQuery(t *testing.T) {
+	err := New([]string{"a.example"}).Allowed("https://a.example/%ZZ?sig=SECRET")
+	if err == nil || strings.Contains(err.Error(), "SECRET") || !errors.Is(err, ErrNotAllowed) {
+		t.Errorf("err = %v", err)
+	}
+}
+
+func TestMalformedRedirectHidesQuery(t *testing.T) {
+	srv, c := server(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Location", "https://cdn.example/%ZZ?sig=SECRET")
+		w.WriteHeader(http.StatusFound)
+	})
+
+	_, err := c.Document(context.Background(), srv.URL+"/doc")
+	if err == nil || strings.Contains(err.Error(), "SECRET") {
+		t.Errorf("err = %v", err)
+	}
+}
+
 func TestRetryable(t *testing.T) {
 	for _, tt := range []struct {
 		name string

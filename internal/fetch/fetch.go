@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -119,6 +120,9 @@ func (e *StatusError) Error() string { return e.URL + ": " + e.Status }
 func shown(rawURL string) string {
 	u, err := url.Parse(rawURL)
 	if err != nil {
+		if i := strings.IndexAny(rawURL, "?#"); i >= 0 {
+			return rawURL[:i]
+		}
 		return rawURL
 	}
 	u.RawQuery, u.ForceQuery, u.Fragment, u.RawFragment = "", false, "", ""
@@ -126,10 +130,28 @@ func shown(rawURL string) string {
 	return u.Redacted()
 }
 
+// queryPart is a URL's query or fragment inside an error message.
+var queryPart = regexp.MustCompile(`[?#][^\s"']+`)
+
+// scrubbed is an error whose message had URL queries removed. It unwraps to
+// the original, so errors.Is and errors.As still see through it.
+type scrubbed struct {
+	msg string
+	err error
+}
+
+func (e scrubbed) Error() string { return e.msg }
+func (e scrubbed) Unwrap() error { return e.err }
+
 // Allowed returns an error unless rawURL may be fetched by this client.
 func (c *Client) Allowed(rawURL string) error {
 	u, err := url.Parse(rawURL)
 	if err != nil {
+		// The parse error quotes the whole URL; keep only what went wrong.
+		var ue *url.Error
+		if errors.As(err, &ue) {
+			err = ue.Err
+		}
 		return refusal(fmt.Sprintf("bad URL %q: %v", shown(rawURL), err))
 	}
 
@@ -166,6 +188,10 @@ func (c *Client) get(ctx context.Context, rawURL string) (*http.Response, error)
 		var ue *url.Error
 		if errors.As(err, &ue) {
 			ue.URL = shown(ue.URL)
+			// A malformed redirect is quoted whole inside the inner error.
+			if msg := ue.Err.Error(); queryPart.MatchString(msg) {
+				ue.Err = scrubbed{msg: queryPart.ReplaceAllString(msg, ""), err: ue.Err}
+			}
 		}
 		return nil, err
 	}
