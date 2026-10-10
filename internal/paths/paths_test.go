@@ -59,6 +59,8 @@ func TestCheckPattern(t *testing.T) {
 		{"nul*.txt", true}, // NULx.txt is a plain name; NUL.txt itself can't exist
 		{"nul.txt", false},
 		{"[ab].log", false},
+		{"logs[old]/client.log", true},
+		{"logs/client[1].log", false},
 	}
 
 	for _, tt := range tests {

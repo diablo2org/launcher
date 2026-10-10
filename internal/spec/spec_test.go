@@ -202,6 +202,13 @@ func TestProfileProblems(t *testing.T) {
 			"reserved",
 		},
 		{
+			"report url on an undeclared host",
+			func(d map[string]interface{}) {
+				d["report"] = map[string]interface{}{"url": "https://reports.elsewhere.example/v1/report"}
+			},
+			"report.url: https://reports.elsewhere.example/v1/report is not on one of the profile's hosts",
+		},
+		{
 			"report pattern taking a whole folder",
 			func(d map[string]interface{}) { d["report"] = map[string]interface{}{"files": []interface{}{"logs/*"}} },
 			"letter or digit",
@@ -210,6 +217,13 @@ func TestProfileProblems(t *testing.T) {
 			"report pattern with a wildcard folder",
 			func(d map[string]interface{}) {
 				d["report"] = map[string]interface{}{"files": []interface{}{"*/client.log"}}
+			},
+			"",
+		},
+		{
+			"report pattern with brackets in the file name",
+			func(d map[string]interface{}) {
+				d["report"] = map[string]interface{}{"files": []interface{}{"logs/client[12].log"}}
 			},
 			"",
 		},
@@ -243,12 +257,12 @@ func TestProfileProblems(t *testing.T) {
 
 func TestProfileReportFiles(t *testing.T) {
 	p, err := ParseProfile(edit(t, func(d map[string]interface{}) {
-		d["report"] = map[string]interface{}{"files": []interface{}{"Mod_Debug*.log", "version.txt", "logs/net-??.log"}}
+		d["report"] = map[string]interface{}{"files": []interface{}{"Mod_Debug*.log", "version.txt", "logs/net-??.log", "logs[old]/client.log"}}
 	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(p.Report.Files) != 3 || p.Report.Files[2] != "logs/net-??.log" {
+	if len(p.Report.Files) != 4 || p.Report.Files[3] != "logs[old]/client.log" {
 		t.Errorf("report.files = %v", p.Report.Files)
 	}
 }

@@ -117,7 +117,9 @@
   const maxBoxes = $derived(Math.max(1, profile?.launch?.maxInstances ?? 1));
   const d2glOn = $derived((profile?.components ?? []).some((c) => c.kind === "d2gl" && (data?.choices?.components ?? {})[c.id]));
 
+  // Closing mid-send would lose the result, so the modal stays until it's in.
   function close() {
+    if (sending) return;
     app.settingsOpen = false;
   }
 
@@ -194,7 +196,7 @@
           </button>
         {/each}
       </div>
-      <button class="rounded p-1.5 text-muted hover:text-title" aria-label="Close settings" onclick={close}>
+      <button class="rounded p-1.5 text-muted hover:text-title disabled:opacity-45" aria-label="Close settings" disabled={sending} onclick={close}>
         <Icon name="close" />
       </button>
     </div>
@@ -465,7 +467,9 @@
 
     <div class="flex items-center justify-between border-t border-line px-8 py-3">
       <p class="text-[12px] text-bad" role="alert">{error}</p>
-      <button class="title rounded-[3px] bg-accent px-6 py-2 text-[12px] !text-white hover:brightness-125" onclick={close}>Done</button>
+      <button class="title rounded-[3px] bg-accent px-6 py-2 text-[12px] !text-white hover:brightness-125 disabled:opacity-45" disabled={sending} onclick={close}
+        >Done</button
+      >
     </div>
   </div>
 </div>
