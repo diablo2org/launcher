@@ -4,8 +4,12 @@ import (
 	"embed"
 	"log"
 	"log/slog"
+	"net/url"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strconv"
+	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 
@@ -15,6 +19,7 @@ import (
 	"github.com/diablo2org/launcher/internal/launch"
 	"github.com/diablo2org/launcher/internal/logs"
 	"github.com/diablo2org/launcher/internal/store"
+	"github.com/diablo2org/launcher/internal/updates"
 )
 
 // The built frontend is embedded, so the launcher ships as a single exe.
@@ -37,6 +42,9 @@ const (
 	envListing = "LAUNCHER_LISTING_DIR"
 	// envDevCA is a certificate to trust, for cmd/devserve.
 	envDevCA = "LAUNCHER_DEV_CA"
+	// envUpdates is a server to check for launcher updates instead of
+	// GitHub; see updates.UseSource.
+	envUpdates = "LAUNCHER_UPDATES_URL"
 	// envData replaces the data folder, to keep test runs separate.
 	envData = "LAUNCHER_DATA_DIR"
 	// envDevTools opens WebView2's DevTools protocol on this port, so tests
@@ -46,6 +54,7 @@ const (
 
 func init() {
 	application.RegisterEvent[app.UpdateProgress]("update:progress")
+	application.RegisterEvent[app.LauncherUpdateProgress]("launcher:update")
 }
 
 func main() {
@@ -94,7 +103,13 @@ func main() {
 
 	var a *application.App
 	host := app.Host{
-		Updates:    fetch.New([]string{"api.github.com"}),
+		Updates: updatesClient(clientOpts),
+		// The installer runs on its own, shown to the player, and replaces
+		// this launcher once it has closed.
+		UpdatesDir:   filepath.Join(dataDir, "updates"),
+		RunInstaller: func(path string) error { return exec.Command(path).Start() },
+		// Quit from a frontend call returns first, so the call completes.
+		Quit:       func() { go func() { time.Sleep(300 * time.Millisecond); a.Quit() }() },
 		OpenFolder: func(path string) error { return a.Env.OpenFileManager(path, false) },
 		ShowFile:   func(path string) error { return a.Env.OpenFileManager(path, true) },
 		SaveFile: func(title, name string) (string, error) {
@@ -153,6 +168,23 @@ func main() {
 	if err := a.Run(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// updatesClient fetches launcher releases from GitHub, or from the server in
+// LAUNCHER_UPDATES_URL.
+func updatesClient(opts []fetch.Option) *fetch.Client {
+	base := os.Getenv(envUpdates)
+	if base == "" {
+		return fetch.New(updates.Hosts)
+	}
+
+	u, err := url.Parse(base)
+	if err != nil || u.Hostname() == "" {
+		log.Fatalf("%s: %q is not a URL", envUpdates, base)
+	}
+	updates.UseSource(base)
+
+	return fetch.New([]string{u.Hostname()}, opts...)
 }
 
 func windowsOptions() application.WindowsOptions {

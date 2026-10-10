@@ -13,6 +13,7 @@ import type {
   SettingValue,
   Status,
 } from "../../bindings/github.com/diablo2org/launcher/internal/core";
+import type { Release } from "../../bindings/github.com/diablo2org/launcher/internal/updates";
 import { errorText } from "./format";
 
 export type Page = "welcome" | "launch" | "ladder" | "catalog" | "checker";
@@ -136,7 +137,10 @@ class AppState {
   page = $state<Page>("launch");
   settingsOpen = $state(false);
   version = $state("");
-  update = $state<{ version: string; url: string } | null>(null);
+  update = $state<Release | null>(null);
+  // The new launcher's download, while it's under way.
+  launcherUpdate = $state<{ done: number; total: number } | null>(null);
+  updateError = $state("");
   error = $state("");
 
   private data = new Map<string, ServerData>();
@@ -145,6 +149,9 @@ class AppState {
     Events.On("update:progress", (ev: { data: UpdateProgress }) => {
       const p = ev.data.progress;
       this.server(ev.data.server).progress = { done: p.done, total: p.total, file: p.file };
+    });
+    Events.On("launcher:update", (ev: { data: { done: number; total: number } }) => {
+      this.launcherUpdate = ev.data;
     });
   }
 
@@ -313,6 +320,19 @@ class AppState {
     if (this.selected === id) {
       this.selected = "";
       this.page = "catalog";
+    }
+  }
+
+  // Downloads and starts the new launcher's installer. On success the
+  // launcher closes, so this only returns on failure.
+  async installUpdate() {
+    this.updateError = "";
+    this.launcherUpdate = { done: 0, total: this.update?.installer?.size ?? 0 };
+    try {
+      await ServerService.InstallUpdate();
+    } catch (err) {
+      this.updateError = errorText(err);
+      this.launcherUpdate = null;
     }
   }
 
