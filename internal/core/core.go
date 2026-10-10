@@ -40,7 +40,7 @@ type Manager struct {
 	entries map[string]*entry
 	// loaded is set once the listing has been read.
 	loaded bool
-	// busy stops two updates of the same server running at once.
+	// busy stops updates and verification of the same server running at once.
 	busy map[string]bool
 }
 
@@ -853,11 +853,18 @@ func (m *Manager) Status(ctx context.Context, id string) Status {
 // and custom components) are left out, as they are for an update.
 func (m *Manager) Verify(ctx context.Context, id string) Status {
 	m.mu.Lock()
-	busy := m.busy[id]
-	m.mu.Unlock()
-	if busy {
+	if m.busy[id] {
+		m.mu.Unlock()
 		return Status{Error: "already updating"}
 	}
+	m.busy[id] = true
+	m.mu.Unlock()
+
+	defer func() {
+		m.mu.Lock()
+		delete(m.busy, id)
+		m.mu.Unlock()
+	}()
 
 	// An emptied cache makes the plan hash every file; Status then saves the
 	// fresh hashes.

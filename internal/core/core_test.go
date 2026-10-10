@@ -376,6 +376,95 @@ func TestVerify(t *testing.T) {
 	}
 }
 
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestVerifyReservesServer(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	if err := h.m.Update(ctx, "slash", false, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	// Hold verification in its first manifest request while trying competing
+	// operations. Only that request blocks, so a missing reservation fails.
+	started, release := make(chan struct{}), make(chan struct{})
+	defer close(release)
+	first := make(chan struct{}, 1)
+	first <- struct{}{}
+	transport := h.site.srv.Client().Transport
+	h.m.clientOpts = []fetch.Option{fetch.WithHTTPClient(&http.Client{
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			select {
+			case <-first:
+				close(started)
+				select {
+				case <-release:
+				case <-r.Context().Done():
+					return nil, r.Context().Err()
+				}
+			default:
+			}
+			return transport.RoundTrip(r)
+		}),
+	})}
+	verifyCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	done := make(chan Status, 1)
+	go func() { done <- h.m.Verify(verifyCtx, "slash") }()
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("verification did not request a manifest")
+	}
+
+	if st := h.m.Verify(ctx, "slash"); st.Error != "already updating" {
+		t.Errorf("concurrent Verify = %+v", st)
+	}
+	if err := h.m.Update(ctx, "slash", false, nil); err == nil || err.Error() != "already updating" {
+		t.Errorf("concurrent Update = %v", err)
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("verification did not finish after cancellation")
+	}
+	if err := h.m.Update(ctx, "slash", false, nil); err != nil {
+		t.Fatalf("Update after Verify = %v", err)
+	}
+}
+
+func TestVerifyReleasesServerOnError(t *testing.T) {
+	for _, failure := range []string{"cache", "plan"} {
+		t.Run(failure, func(t *testing.T) {
+			h := newHarness(t)
+			ctx := context.Background()
+			if failure == "cache" {
+				dir, err := h.store.ServerDir("slash")
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Mkdir(filepath.Join(dir, "hashes.json.tmp"), 0o755); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				h.site.down = true
+			}
+			if st := h.m.Verify(ctx, "slash"); st.Error == "" {
+				t.Fatal("Verify succeeded despite the injected failure")
+			}
+			h.m.mu.Lock()
+			busy := h.m.busy["slash"]
+			h.m.mu.Unlock()
+			if busy {
+				t.Error("Verify left the server busy after an error")
+			}
+		})
+	}
+}
+
 func TestSetFavouriteOrder(t *testing.T) {
 	h := newHarness(t)
 	for _, id := range []string{"a", "b", "c"} {

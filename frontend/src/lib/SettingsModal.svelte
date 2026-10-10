@@ -40,6 +40,7 @@
   ServerService.LaunchDelay().then((ms) => (delay = ms));
 
   async function run(action: () => Promise<unknown>) {
+    verifyResult = "";
     error = "";
     try {
       await action();
