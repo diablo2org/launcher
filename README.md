@@ -28,7 +28,7 @@ Play has only been tested in unit tests so far.
 | 1. Spec and skeleton | Done: spec draft 0.1, schemas, CI |
 | 2. SlashDiablo on the new launcher | Done locally; needs SlashDiablo to publish manifests and add its profile |
 | 3. Multi-server | Done: listing, catalog, pinning, per-server branding, add by URL |
-| 4. Hardening | Update check and tagged releases done; code signing and bug reports to do |
+| 4. Hardening | Update check, tagged releases, code signing and bug reports done |
 | 5. Reach | Other servers, Linux |
 
 ## For server teams
@@ -68,6 +68,22 @@ cd frontend && npm install && cd ..
 | `wails3 package INSTALL_SCOPE=user` | Build a per-user installer, no admin needed |
 | `go test ./internal/...` | Run the tests, including every example and listed profile |
 | `go run ./cmd/listing` | Regenerate `servers/index.json` after changing `servers/` |
+
+### Releases and code signing
+
+Pushing a `v1.2.3` tag builds a release: the installer, `d2pack.exe` and
+`SHA256SUMS.txt` go on a GitHub release. Tagged builds are code signed
+through SSL.com's eSigner, so Windows names the publisher rather than
+warning about an unknown one. NSIS signs the launcher, its uninstaller and
+the installer as it builds them, and CI signs `d2pack.exe` and checks every
+signature before anything is published. Other builds aren't signed, since
+each signing counts against the eSigner plan (about four per release).
+
+Signing needs four repository secrets: `ES_USERNAME` and `ES_PASSWORD` (the
+SSL.com account), `ES_CREDENTIAL_ID` (the certificate's eSigner credential)
+and `ES_TOTP_SECRET` (the eSigner authenticator-app secret).
+[`build/windows/sign.ps1`](build/windows/sign.ps1) does the signing, and can
+be run by hand on Windows with the same four set as environment variables.
 
 ### Local test environment
 
