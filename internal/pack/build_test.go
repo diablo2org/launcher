@@ -306,6 +306,10 @@ func TestBuildRejects(t *testing.T) {
 			p.Manifests[1].Files = "https://elsewhere.net/maphack"
 			return ""
 		}, "hosts"},
+		{"source files off the profile's hosts", func(p *Plan, _ string) string {
+			p.Source[0].Files = "https://elsewhere.net/base"
+			return ""
+		}, "hosts"},
 	}
 
 	for _, tt := range tests {
