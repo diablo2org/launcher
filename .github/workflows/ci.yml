@@ -151,8 +151,12 @@ jobs:
           name: launcher-windows
           path: dist
 
+      # A tag with a suffix, such as v1.2.3-rc.1, is a pre-release: the
+      # launcher's update check skips those, so test builds never reach
+      # players.
       - uses: softprops/action-gh-release@v2
         with:
+          prerelease: ${{ contains(github.ref_name, '-') }}
           files: |
             dist/**/*-installer.exe
             dist/**/d2pack.exe
