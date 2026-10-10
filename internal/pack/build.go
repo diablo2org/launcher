@@ -2,6 +2,7 @@ package pack
 
 import (
 	"bytes"
+	"crypto/ed25519"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -169,6 +170,9 @@ type BuildOptions struct {
 	Version string
 	// Out is the folder to build into. It must not exist yet.
 	Out string
+	// Key signs every manifest, and must be one of the profile's
+	// signing.keys. It is needed exactly when the profile has keys.
+	Key ed25519.PrivateKey
 }
 
 // Built is one manifest Build wrote.
@@ -210,6 +214,9 @@ func Build(plan *Plan, opts BuildOptions) (*BuildResult, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%s:\n%w", plan.Profile, err)
 	}
+	if err := checkKey(profile, opts.Key); err != nil {
+		return nil, err
+	}
 
 	out, err := filepath.Abs(opts.Out)
 	if err != nil {
@@ -228,7 +235,7 @@ func Build(plan *Plan, opts BuildOptions) (*BuildResult, error) {
 		return nil, err
 	}
 
-	b := &builder{plan: plan, profile: profile, out: out, tmp: tmp, version: opts.Version, written: map[string]string{}}
+	b := &builder{plan: plan, profile: profile, out: out, tmp: tmp, version: opts.Version, key: opts.Key, written: map[string]string{}}
 	result, err := b.run()
 	if err != nil {
 		os.RemoveAll(tmp)
@@ -249,6 +256,7 @@ type builder struct {
 	out     string
 	tmp     string
 	version string
+	key     ed25519.PrivateKey
 	// written maps each output file, by its Windows key, to its SHA-256, so
 	// two manifests sharing a folder can share a file but not clash.
 	written map[string]string
@@ -454,6 +462,16 @@ func (b *builder) build(e PlanEntry, manifestURL string) (*Built, error) {
 	}
 	if err := os.WriteFile(dst, data, 0o644); err != nil {
 		return nil, err
+	}
+
+	if b.key != nil {
+		if _, ok := b.written[key+".sig"]; ok {
+			return nil, fmt.Errorf("%s.sig is also a file another manifest publishes", manifestRel)
+		}
+		b.written[key+".sig"] = ""
+		if err := os.WriteFile(dst+".sig", spec.SignManifest(data, b.key), 0o644); err != nil {
+			return nil, err
+		}
 	}
 
 	return built, nil

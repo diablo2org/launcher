@@ -103,6 +103,30 @@ Channels and versions the plan leaves out are listed, and their published
 manifests are left as they are. [`examples/slashdiablo/build.json`](../examples/slashdiablo/build.json)
 builds SlashDiablo's from its current patch folders.
 
+## Signing your manifests
+
+Optional, and worth it: with signed manifests, someone who breaks into your
+file host still can't make the launcher install their files. Make a key once:
+
+```
+d2pack keygen -out myserver-key.pem
+```
+
+Add the public key it prints to your profile as `"signing": { "keys": [...] }`
+and open a pull request. Then build with the key:
+
+```
+d2pack build -key myserver-key.pem build.json
+```
+
+Every manifest gets a `.sig` beside it; upload both. Keep the key file
+secret, out of your repository and off your web host. If you build in CI,
+store it as a secret. `d2pack check -profile myserver.json manifest.json`
+checks a manifest's signature too. Once the profile has keys, the launcher
+won't use an unsigned manifest, so sign before (or as) the profile change
+is merged. [SPEC section 4.2](../docs/SPEC.md#42-signed-manifests) has the
+details.
+
 ## Patching
 
 Rebuild the manifest and upload it with the new files. No pull request is

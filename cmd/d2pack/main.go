@@ -2,9 +2,10 @@
 // builds the file manifests the launcher downloads from.
 //
 //	d2pack init -id <id> -name <name> -gateway <host> -manifest <url>
-//	d2pack manifest -server <id> -version <v> -url <base url> [-once <pattern>]... [-exclude <pattern>]... [-only <pattern>]... <folder>
-//	d2pack build [-version <v>] [-out <folder>] <plan.json>
+//	d2pack manifest -server <id> -version <v> -url <base url> [-key <file>] [-once <pattern>]... [-exclude <pattern>]... [-only <pattern>]... <folder>
+//	d2pack build [-version <v>] [-out <folder>] [-key <file>] <plan.json>
 //	d2pack check -profile <profile.json> [<manifest.json>...]
+//	d2pack keygen -out <file>
 package main
 
 import (
@@ -36,6 +37,8 @@ func main() {
 		err = build(os.Args[2:])
 	case "check":
 		err = check(os.Args[2:])
+	case "keygen":
+		err = keygen(os.Args[2:])
 	case "-h", "--help", "help":
 		usage()
 		return
@@ -58,21 +61,29 @@ func usage() {
       repository's servers/ folder in a pull request. -report is where the
       launcher sends players' bug reports (SPEC section 3.4).
 
-  d2pack manifest -server <id> -version <v> -url <base url> [-once <pattern>] [-exclude <pattern>] [-only <pattern>] <folder>
+  d2pack manifest -server <id> -version <v> -url <base url> [-key <file>] [-once <pattern>] [-exclude <pattern>] [-only <pattern>] <folder>
       Write <folder>/manifest.json listing every file in <folder> with its
       size and SHA-256, to be published at <base url> next to the files.
       Run it again whenever you patch. Blizzard's base archives are always
       left out. -once marks files the player owns after the first install;
       -only keeps just matching files, to build a component's manifest.
+      -key signs it, writing manifest.json.sig to upload beside it.
 
-  d2pack build [-version <v>] [-out <folder>] <plan.json>
+  d2pack build [-version <v>] [-out <folder>] [-key <file>] <plan.json>
       Build every manifest in a plan at once: each channel and component
       version, with its files, laid out by URL in <folder> ready to upload.
       The URLs come from the profile the plan names. -version defaults to
-      today's date, -out to upload/<version> next to the plan.
+      today's date, -out to upload/<version> next to the plan. A profile
+      with signing keys needs -key, and every manifest gets a .sig.
 
   d2pack check -profile <profile.json> [<manifest.json>...]
-      Check a profile, and manifests against it.
+      Check a profile, and manifests against it, with their signatures
+      when the profile has signing keys.
+
+  d2pack keygen -out <file>
+      Make a manifest signing key. Keep <file> secret and out of the
+      repository; add the public key it prints to the profile's
+      signing.keys.
 `)
 }
 
@@ -126,6 +137,7 @@ func manifest(args []string) error {
 	fs.Var(&once, "once", "pattern for files the player owns after install (repeatable)")
 	fs.Var(&exclude, "exclude", "pattern for files to leave out (repeatable)")
 	fs.Var(&only, "only", "keep just files matching this pattern, for a component (repeatable)")
+	keyFile := fs.String("key", "", "signing key from d2pack keygen, to sign the manifest")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -146,6 +158,16 @@ func manifest(args []string) error {
 	if err := pack.WriteManifest(m, out); err != nil {
 		return err
 	}
+	if *keyFile != "" {
+		key, err := pack.LoadKey(*keyFile)
+		if err != nil {
+			return err
+		}
+		if err := pack.SignManifestFile(out, key); err != nil {
+			return err
+		}
+		fmt.Printf("Signed it: upload %s.sig beside it.\n", out)
+	}
 
 	var total int64
 	for _, f := range m.Files {
@@ -161,12 +183,22 @@ func build(args []string) error {
 	fs := flag.NewFlagSet("build", flag.ContinueOnError)
 	version := fs.String("version", time.Now().Format("2006.01.02"), "manifest version")
 	out := fs.String("out", "", "folder to build into; must not exist yet")
+	keyFile := fs.String("key", "", "signing key from d2pack keygen; needed when the profile has signing keys")
 
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if fs.NArg() != 1 {
-		return errors.New("usage: d2pack build [-version <v>] [-out <folder>] <plan.json>")
+		return errors.New("usage: d2pack build [-version <v>] [-out <folder>] [-key <file>] <plan.json>")
+	}
+
+	opts := pack.BuildOptions{Version: *version}
+	if *keyFile != "" {
+		key, err := pack.LoadKey(*keyFile)
+		if err != nil {
+			return err
+		}
+		opts.Key = key
 	}
 
 	planFile := fs.Arg(0)
@@ -179,7 +211,8 @@ func build(args []string) error {
 		*out = filepath.Join(filepath.Dir(planFile), "upload", *version)
 	}
 
-	result, err := pack.Build(plan, pack.BuildOptions{Version: *version, Out: *out})
+	opts.Out = *out
+	result, err := pack.Build(plan, opts)
 	if err != nil {
 		return err
 	}
@@ -216,6 +249,11 @@ func check(args []string) error {
 	}
 	fmt.Printf("%s: OK (%s)\n", *profileFile, p.Name)
 
+	keys, err := p.ManifestKeys()
+	if err != nil {
+		return err
+	}
+
 	failed := false
 	for _, mf := range fs.Args() {
 		data, err := os.ReadFile(mf)
@@ -228,12 +266,67 @@ func check(args []string) error {
 			failed = true
 			continue
 		}
+		if keys != nil {
+			sig, err := os.ReadFile(mf + ".sig")
+			if err == nil {
+				err = spec.VerifyManifest(data, sig, keys)
+			}
+			if err != nil {
+				fmt.Printf("%s: %v\n", mf, err)
+				failed = true
+				continue
+			}
+			fmt.Printf("%s: OK, signed\n", mf)
+			continue
+		}
 		fmt.Printf("%s: OK\n", mf)
 	}
 
 	if failed {
 		return errors.New("some manifests have problems")
 	}
+
+	return nil
+}
+
+func keygen(args []string) error {
+	fs := flag.NewFlagSet("keygen", flag.ContinueOnError)
+	out := fs.String("out", "", "file to write the private key to")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *out == "" {
+		return errors.New("usage: d2pack keygen -out <file>")
+	}
+
+	private, public, err := pack.GenerateKey()
+	if err != nil {
+		return err
+	}
+
+	// O_EXCL, so an existing key is never replaced: losing one means
+	// re-signing everything under a new key.
+	f, err := os.OpenFile(*out, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return err
+	}
+	if _, err := f.Write(private); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+
+	fmt.Printf(`Wrote the private key to %s. Keep it secret and out of your repository:
+whoever has it can sign manifests the launcher will trust.
+
+Add the public key to your profile, in a pull request:
+
+  "signing": { "keys": [%q] }
+
+Then sign every manifest: d2pack build -key %s <plan.json>
+`, *out, public, *out)
 
 	return nil
 }

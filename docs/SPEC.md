@@ -190,6 +190,7 @@ can't be changed.
 - **`news`**: a [JSON Feed 1.1](https://www.jsonfeed.org/version/1.1/). See
   3.2.
 - **`ladder`**: a ladder document. See 3.3.
+- **`signing`**: keys the server signs its manifests with. See 4.2.
 
 ### 3.2 News
 
@@ -339,6 +340,41 @@ update would. `once` files and custom components are never verified.
 
 Files in the server folder that no manifest lists are left alone, apart from
 component switching (section 5).
+
+### 4.2 Signed manifests
+
+The profile is reviewed, but manifests live on the server's own web host. So
+someone who breaks into that host could publish a manifest listing their own
+files, and every launcher would download them. A server can prevent that by
+signing its manifests:
+
+```jsonc
+"signing": { "keys": ["y/Whg2uTkYz1YmWopLQNkmiUkMynC1i0DRQVNihMlO4="] }
+```
+
+- **`signing.keys`**: one to four Ed25519 public keys, base64. More than one
+  lets a server move to a new key: list both, sign with the new one, then
+  drop the old one in a later profile change.
+- Each manifest's signature is published beside it, at the manifest's URL
+  with `.sig` added (`live/manifest.json.sig`). It is the Ed25519 signature
+  of the manifest file's exact bytes, in base64 on one line.
+- With keys in the profile, the launcher only uses a manifest whose
+  signature is valid for one of them. A changed or unsigned manifest stops
+  the update, and nothing it lists is downloaded. The copy kept for offline
+  use is the last one that verified, and it is checked again against the
+  profile's current keys when used.
+- Without `signing`, manifests aren't signed, as before.
+
+`d2pack keygen -out key.pem` makes a key and prints the public key for the
+profile; `d2pack build -key key.pem` signs every manifest it builds, and
+refuses to build without the key when the profile has keys. The private key
+belongs only on the machine or CI secret that builds releases. Whoever has
+it can sign manifests the launcher will trust, so it should never be on the
+web host itself.
+
+A signature proves a manifest came from the server, not that it is the
+newest: a host could still serve an older signed manifest. Signing protects
+against swapped files, not a server held back to an older patch.
 
 ## 5. Components
 
@@ -595,6 +631,3 @@ launcher keeps:
    this document.
 3. Linux: a Flatpak build that runs the game through Wine needs the registry
    writes to go into the Wine prefix instead.
-4. Optional signing: a server could add a public key to its profile and sign
-   its manifests, so a compromised web host couldn't swap game files. Left
-   out until a server asks for it.
