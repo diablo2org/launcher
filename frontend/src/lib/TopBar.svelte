@@ -10,8 +10,6 @@
     return links?.discord || links?.forum || links?.website || "";
   });
 
-  const onServer = $derived(app.page === "launch" || app.page === "ladder");
-
   // Kept in step however the window changes: this button, double-clicking
   // the bar, snapping, or Windows+Up.
   // Replies can arrive out of order, so only the newest request's counts.
@@ -50,8 +48,13 @@
 
 <svelte:window onresize={checkMaximised} />
 
-<header class="drag flex h-20 shrink-0 items-center gap-10 border-b border-line pr-3 pl-8">
-  {#if onServer}
+<header
+  class={[
+    "drag flex items-center gap-10 pr-3",
+    app.tabBar ? "h-20 shrink-0 border-b border-line pl-8" : "absolute inset-x-0 top-0 z-30 h-10",
+  ]}
+>
+  {#if app.tabBar}
     {@render item("Launch", app.page === "launch", () => (app.page = "launch"))}
     {#if app.current?.profile?.ladder}
       {@render item("Ladder", app.page === "ladder", () => (app.page = "ladder"))}
@@ -59,26 +62,14 @@
     {#if community}
       {@render item("Community", false, () => Browser.OpenURL(community), true)}
     {/if}
-  {:else if app.page === "welcome"}
-    <span class="title text-[14px]">Getting started</span>
-  {:else if app.page === "catalog"}
-    <span class="title text-[14px]">All servers</span>
-  {:else}
-    <span class="title text-[14px]">Profile checker</span>
   {/if}
+  <!-- The launcher's own pages title themselves. -->
 
   <div class="flex-1"></div>
 
-  <button
-    class="no-drag rounded p-2 text-muted transition-colors hover:text-title"
-    title="Settings"
-    aria-label="Settings"
-    onclick={() => (app.settingsOpen = true)}
-  >
-    <Icon name="gear" size={17} />
-  </button>
-
-  <div class="no-drag ml-2 flex self-start pt-1">
+  <!-- No Settings on the welcome pages: nothing there is needed before set-up
+       ends, and the profile checker would leave the flow. Settings is on the rail. -->
+  <div class={["no-drag ml-2 flex self-start", app.tabBar ? "pt-1" : "pt-0.5"]}>
     <button class="rounded p-2 text-muted hover:text-title" aria-label="Minimise" onclick={() => Window.Minimise()}>
       <Icon name="min" size={16} />
     </button>

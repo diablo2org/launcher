@@ -51,6 +51,9 @@ type Branding struct {
 	// BackgroundHasLogo means the background art already shows the logo, so
 	// the launch screen doesn't draw it again.
 	BackgroundHasLogo bool `json:"backgroundHasLogo,omitempty"`
+	// HideTabBar drops the Launch / Ladder / Community bar from the server's
+	// pages; its links and ladder are reached from the launch page instead.
+	HideTabBar bool `json:"hideTabBar,omitempty"`
 }
 
 // Asset is an image the launcher downloads and caches.

@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { Browser } from "@wailsio/runtime";
   import { ServerService } from "../../bindings/github.com/diablo2org/launcher/internal/app";
   import type { ServerInfo } from "../../bindings/github.com/diablo2org/launcher/internal/core";
   import { bytes, errorText } from "./format";
   import NewsList from "./NewsList.svelte";
+  import Select from "./Select.svelte";
   import ServerLinks from "./ServerLinks.svelte";
   import { app, type ServerData } from "./state.svelte";
 
@@ -13,17 +13,18 @@
   const status = $derived(data.status);
   const percent = $derived(data.progress && data.progress.total > 0 ? Math.min(100, (data.progress.done / data.progress.total) * 100) : 0);
   const channels = $derived(profile?.channels ?? []);
+  const channel = $derived(channels.find((c) => c.id === data.choices?.channel));
 
   // Components running the player's own files, named so it's never a surprise.
   const customNames = $derived(
     (profile?.components ?? []).filter((c) => (data.choices?.components ?? {})[c.id] === "custom").map((c) => c.name),
   );
 
-  // The one line of text beside the button.
+  // The status beside PLAY: one line, then a detail line under it.
   const message = $derived.by(() => {
     if (!app.baseReady) return "Choose your Diablo II folder in settings";
     if (data.busy === "verifying") return "Verifying files…";
-    if (data.busy === "updating") return data.progress?.file ? `Updating ${data.progress.file}` : "Updating…";
+    if (data.busy === "updating") return `Updating ${profile?.name ?? "game"}`;
     if (data.launched) return `${profile?.name ?? "Game"} started`;
     if (!status) return data.checking ? "Checking files…" : "";
     if (status.error) return status.error;
@@ -31,8 +32,9 @@
     if (!status.upToDate) {
       return `Update available · ${status.updateFiles} ${status.updateFiles === 1 ? "file" : "files"}, ${bytes(status.updateBytes)}`;
     }
-    return "Game is up to date";
+    return "Ready to play";
   });
+  const failed = $derived(!!status?.error || !!data.error);
 
   const action = $derived.by((): { label: string; run: () => void } | null => {
     if (!app.baseReady) return { label: "Settings", run: () => (app.settingsOpen = true) };
@@ -53,131 +55,93 @@
   }
 </script>
 
-<div class="flex h-full">
-  <div class="relative flex min-w-0 flex-1 flex-col">
-    <div class="flex flex-1 items-start justify-center pt-8">
-      {#if profile?.branding?.backgroundHasLogo && data.branding.background}
-        <!-- The server's art already shows its logo. -->
-      {:else if data.branding.logo}
-        <img src={data.branding.logo} alt={profile?.name ?? ""} class="max-h-64 max-w-[260px] object-contain drop-shadow-[0_4px_24px_rgba(0,0,0,0.8)]" />
-      {:else}
-        <h1 class="title mt-16 text-4xl drop-shadow-[0_2px_12px_rgba(0,0,0,0.9)]">{profile?.name ?? info.id}</h1>
-      {/if}
-    </div>
+<div class="relative h-full">
+  <div class="pointer-events-none absolute inset-x-0 top-0 flex justify-center pt-8">
+    {#if profile?.branding?.backgroundHasLogo && data.branding.background}
+      <!-- The server's art already shows its logo. -->
+    {:else if data.branding.logo}
+      <img src={data.branding.logo} alt={profile?.name ?? ""} class="max-h-64 max-w-[260px] object-contain drop-shadow-[0_4px_24px_rgba(0,0,0,0.8)]" />
+    {:else}
+      <h1 class="title mt-16 text-4xl drop-shadow-[0_2px_12px_rgba(0,0,0,0.9)]">{profile?.name ?? info.id}</h1>
+    {/if}
+  </div>
 
+  <!-- News grows down to just above the status line, then scrolls. -->
+  <div class={["pointer-events-none absolute right-4 bottom-[118px] flex flex-col items-end", app.tabBar ? "top-4" : "top-[46px]"]}>
+    <div class="pointer-events-auto flex min-h-0 flex-col"><NewsList {data} /></div>
+  </div>
+
+  <div class="absolute inset-x-0 bottom-0 flex flex-col gap-4 px-7 pb-6">
     {#if data.copyBytes > 0}
-      <div class="mx-8 mb-4 rounded border border-edge bg-panel/95 p-4" role="alertdialog" aria-label="Copy game archives">
-        <p class="text-[13px] text-title">
+      <div class="glass mx-auto max-w-[560px] p-4" role="alertdialog" aria-label="Copy game archives">
+        <p class="text-[14px] text-parchment">
           The game archives can't be linked into this server's folder, so they need copying. This uses {bytes(data.copyBytes)} of disk space.
         </p>
-        <div class="mt-3 flex gap-2">
-          <button class="title rounded bg-accent px-4 py-1.5 text-[12px] !text-white hover:brightness-125" onclick={() => data.update(true)}>Copy and install</button>
-          <button class="title rounded border border-edge px-4 py-1.5 text-[12px]" onclick={() => (data.copyBytes = 0)}>Cancel</button>
+        <div class="mt-3 flex gap-3">
+          <button class="btn-stone primary h-9 px-4 text-[12px]" onclick={() => data.update(true)}>COPY AND INSTALL</button>
+          <button class="btn-stone h-9 px-4 text-[12px]" onclick={() => (data.copyBytes = 0)}>CANCEL</button>
         </div>
       </div>
     {/if}
 
-    <div class="shrink-0 px-12">
-      <ServerLinks links={profile?.links} />
-    </div>
-
-    <div class="flex h-[120px] shrink-0 items-end gap-8 px-12 pb-6">
-      <div class="min-w-0 flex-1 pb-3">
-        {#if data.busy === "updating"}
-          <div class="mb-3 h-2 overflow-hidden rounded-[3px] border border-black bg-track" role="progressbar" aria-valuenow={Math.round(percent)} aria-valuemin="0" aria-valuemax="100">
-            <div class="h-full bg-accent transition-[width] duration-200" style:width={`${percent}%`}></div>
-          </div>
-        {/if}
-        <p class="truncate text-[15px] text-title" class:!text-bad={!!status?.error || !!data.error} title={data.error || message}>
-          {data.error || message}
-        </p>
-        {#if data.busy === "updating" && data.progress}
-          <p class="mt-1 text-[12px] text-muted">{bytes(data.progress.done)} of {bytes(data.progress.total)}</p>
-        {:else if customNames.length}
-          <p class="mt-1 text-[12px] text-[#d9b77a]" title="Your own files; not supported by {profile?.name}. Change in Settings, Game.">
-            Custom: {customNames.join(", ")}
-          </p>
-        {/if}
+    <!-- Links on the left, PLAY in the middle, the status on the right, all on one baseline. -->
+    <div class="grid grid-cols-[1fr_auto_1fr] items-end gap-6">
+      <div class="min-w-0">
+        <ServerLinks links={profile?.links} ladder={!!profile?.ladder && !app.tabBar} />
       </div>
 
-      <div class="flex w-[272px] shrink-0 flex-col gap-2">
+      <div class="flex w-[286px] flex-col gap-2.5">
         {#if channels.length > 1 && data.choices}
-          <select
-            class="h-9 w-full rounded-[3px] border border-edge bg-panel/95 px-3 text-[12px] font-bold text-title"
-            aria-label="Channel"
-            value={data.choices.channel}
-            disabled={data.busy !== ""}
-            onchange={(e) => setChannel(e.currentTarget.value)}
-          >
-            {#each channels as ch (ch.id)}
-              <option value={ch.id}>{ch.name}</option>
-            {/each}
-          </select>
+          <div class="h-9">
+            <Select
+              label="Channel"
+              value={data.choices.channel}
+              options={channels.map((ch) => ({ value: ch.id, label: ch.name }))}
+              disabled={data.busy !== ""}
+              onchange={setChannel}
+            />
+          </div>
         {/if}
-        <button
-          class="title h-12 w-full rounded-[3px] bg-accent text-[15px] !text-white shadow-[0_0_24px_rgba(0,0,0,0.6)] transition hover:brightness-125 disabled:opacity-60 disabled:hover:brightness-100"
-          disabled={!action || data.busy !== "" || data.checking}
-          onclick={() => action?.run()}
-        >
+        {#if data.busy === "updating"}
+          <div>
+            <div class="mb-1.5 flex items-baseline justify-between">
+              <span class="title text-[12px] tracking-[0.1em] !text-[#c9b48a]">UPDATING</span>
+              <span class="title text-[13px] !text-[#d9b56e]">{Math.floor(percent)}%</span>
+            </div>
+            <div class="h-2 overflow-hidden border border-black bg-track shadow-[inset_0_1px_2px_rgba(0,0,0,0.8)]" role="progressbar" aria-label="Update progress" aria-valuenow={Math.round(percent)} aria-valuemin="0" aria-valuemax="100">
+              <div class="h-full bg-gradient-to-b from-[#e2c98f] to-[#a8875a] transition-[width] duration-200" style:width={`${percent}%`}></div>
+            </div>
+          </div>
+        {/if}
+        <button class="btn-play h-[68px] w-full text-[21px]" disabled={!action || data.busy !== "" || data.checking} onclick={() => action?.run()}>
           {#if data.busy === "updating"}
-            Updating…
+            UPDATING…
           {:else if data.busy === "launching"}
-            Starting…
+            STARTING…
           {:else if data.busy === "verifying"}
-            Verifying…
+            VERIFYING…
           {:else}
-            {action?.label ?? "…"}
+            {(action?.label ?? "…").toUpperCase()}
           {/if}
         </button>
       </div>
-    </div>
-  </div>
 
-  <aside class="relative flex w-[350px] shrink-0 flex-col border-l border-line bg-ink/40">
-    <div class="min-h-0 flex-1">
-      <NewsList {data} />
-    </div>
-    {#if app.update}
-      {@const u = app.launcherUpdate}
-      <div class="absolute right-4 bottom-3 flex items-center gap-3 text-[10px]">
-        {#if app.updateError}
-          <span class="text-bad" title={app.updateError}>Update failed</span>
-        {/if}
-        {#if u}
-          <span class="title !text-date" role="status">
-            {u.total && u.done >= u.total ? "Starting installer…" : `Downloading ${app.update.version} · ${u.total ? Math.floor((u.done / u.total) * 100) : 0}%`}
-          </span>
-        {:else if app.update.installer}
-          <button
-            class="title !text-date hover:!text-title"
-            title={`Downloads the ${app.update.version} installer (${bytes(app.update.installer.size)}), checks it, and runs it. The launcher closes while it installs.`}
-            onclick={() => app.installUpdate()}
-          >
-            Update to {app.update.version}
-          </button>
-          <button class="title !text-muted hover:!text-title" title="What's new" aria-label="What's new" onclick={() => Browser.OpenURL(app.update!.url)}>↗</button>
-        {:else if app.update.download}
-          <!-- macOS and Linux: the new package downloads in the browser, to install as the first. -->
-          <button
-            class="title !text-date hover:!text-title"
-            title={`Downloads ${app.update.version} in your browser. Install it as you did this one.`}
-            onclick={() => Browser.OpenURL(app.update!.download)}
-          >
-            Download {app.update.version}
-          </button>
-          <button class="title !text-muted hover:!text-title" title="What's new" aria-label="What's new" onclick={() => Browser.OpenURL(app.update!.url)}>↗</button>
+      <div class="min-w-0 justify-self-end text-right">
+        <p class="title truncate text-[17px] !text-parchment [text-shadow:0_1px_8px_rgba(0,0,0,0.9)]" class:!text-bad={failed} title={data.error || message}>
+          {data.error || message}
+        </p>
+        {#if data.busy === "updating" && data.progress}
+          <p class="mt-1.5 truncate text-[13px] text-body">
+            {data.progress.file ? `${data.progress.file} · ` : ""}{bytes(data.progress.done)} of {bytes(data.progress.total)}
+          </p>
+        {:else if customNames.length}
+          <p class="mt-1.5 text-[13px] text-[#d9b77a]" title="Your own files; not supported by {profile?.name}. Change in Settings, Game.">
+            Custom: {customNames.join(", ")}
+          </p>
         {:else}
-          <button
-            class="title !text-date hover:!text-title"
-            title="A newer launcher is available. Opens the download page."
-            onclick={() => Browser.OpenURL(app.update!.url)}
-          >
-            {app.update.version} available ↗
-          </button>
+          <p class="mt-1.5 truncate text-[13px] text-body">{[profile?.name, channel?.name].filter(Boolean).join(" · ")}</p>
         {/if}
       </div>
-    {:else}
-      <p class="title absolute right-4 bottom-3 text-[10px] !text-muted">{app.version}</p>
-    {/if}
-  </aside>
+    </div>
+  </div>
 </div>

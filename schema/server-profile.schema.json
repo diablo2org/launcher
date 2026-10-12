@@ -90,6 +90,11 @@
           "type": "boolean",
           "default": false,
           "description": "The background image already shows the logo, so the launch screen doesn't draw it again."
+        },
+        "hideTabBar": {
+          "type": "boolean",
+          "default": false,
+          "description": "Leave out the Launch / Ladder / Community bar on the server's pages; the ladder is opened from the launch page instead."
         }
       }
     },

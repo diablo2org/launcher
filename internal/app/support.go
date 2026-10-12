@@ -30,20 +30,26 @@ func NewSupportService(st *store.Store, m *core.Manager, host Host) *SupportServ
 	return &SupportService{st: st, m: m, host: host}
 }
 
-// ReportContents lists what a bug report would hold, for the player to see
-// before making one.
-func (s *SupportService) ReportContents() []report.Item {
-	return report.Collect(s.input(""))
+// ReportContents lists what a saved bug report would hold, for the player to
+// see before making one: the launcher's own when id is "", else that
+// server's.
+func (s *SupportService) ReportContents(id string) []report.Item {
+	return report.Collect(s.input(id))
 }
 
-// SaveReport asks where to save a bug report, writes it there and shows it.
-// It returns the file, or "" if the player cancelled.
-func (s *SupportService) SaveReport() (string, error) {
+// SaveReport asks where to save a bug report, writes it there and shows it:
+// the launcher's own when id is "", else that server's. It returns the file,
+// or "" if the player cancelled.
+func (s *SupportService) SaveReport(id string) (string, error) {
 	if s.host.SaveFile == nil {
 		return "", fmt.Errorf("saving files isn't available")
 	}
 
-	name := "launcher-report-" + time.Now().Format("2006-01-02-1504") + ".zip"
+	prefix := "launcher"
+	if id != "" {
+		prefix = id
+	}
+	name := prefix + "-report-" + time.Now().Format("2006-01-02-1504") + ".zip"
 	path, err := s.host.SaveFile("Save bug report", name)
 	if err != nil || path == "" {
 		return "", err
@@ -52,7 +58,7 @@ func (s *SupportService) SaveReport() (string, error) {
 		path += ".zip"
 	}
 
-	in := s.input("")
+	in := s.input(id)
 	var buf bytes.Buffer
 	if err := report.Write(&buf, report.Collect(in), in.Home); err != nil {
 		return "", err
@@ -86,8 +92,9 @@ func (s *SupportService) LogFrontendError(message string) {
 	slog.Error("frontend", "err", message)
 }
 
-// input is where a report's contents come from: every server's, or when only
-// is set, that server's alone, with state.json cut down to match.
+// input is where a report's contents come from: the launcher's alone (logs,
+// settings, system) when only is "", else that server's too, with state.json
+// cut down to match. No report holds another server's files.
 func (s *SupportService) input(only string) report.Input {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -95,18 +102,14 @@ func (s *SupportService) input(only string) report.Input {
 	}
 
 	in := report.Input{DataDir: s.st.Dir(), Base: s.m.Base(), Home: home}
-	if state, err := s.st.Load(); err == nil {
-		for id := range state.Servers {
-			in.Servers = append(in.Servers, id)
-		}
-		sort.Strings(in.Servers)
-
-		if only != "" {
-			in.State = scopedState(state, only)
-		}
-	}
 	if only != "" {
 		in.Servers = []string{only}
+		if state, err := s.st.Load(); err == nil {
+			in.State = scopedState(state, only)
+		} else {
+			// The raw file holds every server's settings.
+			in.NoState = true
+		}
 	}
 
 	// A server whose profile can't be loaded, offline say, just adds none of

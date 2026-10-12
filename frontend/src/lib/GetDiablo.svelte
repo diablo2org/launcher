@@ -5,7 +5,9 @@
   import type { BaseSetup, ServerInfo } from "../../bindings/github.com/diablo2org/launcher/internal/core";
   import { onMount } from "svelte";
   import Icon from "./Icon.svelte";
+  import LogsLink from "./LogsLink.svelte";
   import RosettaPrompt from "./RosettaPrompt.svelte";
+  import Select from "./Select.svelte";
   import StepList from "./StepList.svelte";
   import { bytes, errorText } from "./format";
   import { app } from "./state.svelte";
@@ -214,7 +216,7 @@
   const allDone = $derived(result?.ok === true && (!first || serverState === "done" || serverState === "failed"));
 </script>
 
-<p class="text-[11px] text-muted">Step {stepNumber} of {total}</p>
+<p class="title text-[11px] tracking-[0.12em] !text-date">STEP {stepNumber} OF {total}</p>
 
 {#if step === "choose"}
   <h1 class="title mt-2 text-[26px]">Get Diablo II</h1>
@@ -225,41 +227,35 @@
 
   <div class="mt-6 grid grid-cols-2 gap-3">
     <button
-      class={[
-        "rounded border p-5 text-left transition-colors disabled:opacity-40",
-        choice === "install" ? "border-accent bg-accent/20" : "border-line bg-panel/90 hover:border-edge",
-      ]}
+      class="card pick p-5 text-left"
       aria-pressed={choice === "install"}
       disabled={!setup?.available}
       title={setup && !setup.available ? setup.unavailable : undefined}
       onclick={() => (choice = "install")}
     >
-      <p class="title text-[14px]">Install Diablo II for me</p>
+      <p class="title text-[14px] !text-parchment">Install Diablo II for me</p>
       <p class="mt-2 text-[12px] leading-snug text-body">Downloads Diablo II and Lord of Destruction from Blizzard (about 2 GB).</p>
     </button>
     <button
-      class={[
-        "rounded border p-5 text-left transition-colors",
-        choice === "existing" ? "border-accent bg-accent/20" : "border-line bg-panel/90 hover:border-edge",
-      ]}
+      class="card pick p-5 text-left"
       aria-pressed={choice === "existing"}
       onclick={() => (choice = "existing")}
     >
-      <p class="title text-[14px]">I already have Diablo II installed</p>
+      <p class="title text-[14px] !text-parchment">I already have Diablo II installed</p>
       <p class="mt-2 text-[12px] leading-snug text-body">Use the folder where Diablo II and Lord of Destruction are installed.</p>
     </button>
   </div>
 
   {#if choice === "install"}
-    <section class="mt-4 rounded border border-line bg-panel/90 p-5">
-      <h2 class="title text-[14px]">Install into</h2>
-      <p class="mt-2 truncate text-[13px] text-title" title={dir}>{dir}</p>
+    <section class="mt-4 card p-5">
+      <h2 class="title text-[12px] tracking-[0.08em] !text-[#c9b48a]">INSTALL INTO</h2>
+      <p class="mt-2 truncate text-[13.5px] text-parchment" title={dir}>{dir}</p>
       <button
-        class="title mt-4 flex items-center gap-2 rounded-[3px] border border-edge px-4 py-2 text-[12px] hover:border-muted"
+        class="btn-stone mt-4 flex h-9 items-center gap-2 px-4 text-[11px]"
         onclick={chooseFolder}
       >
         <Icon name="folder" size={14} />
-        Choose another folder
+        CHOOSE ANOTHER FOLDER
       </button>
 
       <button class="title mt-5 text-[12px] !text-muted hover:!text-title" aria-expanded={advanced} onclick={() => (advanced = !advanced)}>
@@ -267,12 +263,15 @@
       </button>
       {#if advanced && setup}
         <div class="mt-3 flex items-center gap-3">
-          <label class="text-[12px] text-body" for="base-version">Game version</label>
-          <select id="base-version" class="h-8 rounded-[3px] border border-edge bg-panel px-2 text-[12px]" bind:value={version}>
-            {#each setup.versions as v (v)}
-              <option value={v}>{v}{v === setup.defaultVersion ? " (recommended)" : ""}</option>
-            {/each}
-          </select>
+          <span class="text-[12px] text-body">Game version</span>
+          <div class="h-8 w-[200px]">
+            <Select
+              label="Game version"
+              value={version}
+              options={(setup.versions ?? []).map((v) => ({ value: v, label: v + (v === setup!.defaultVersion ? " (recommended)" : "") }))}
+              onchange={(v) => (version = v)}
+            />
+          </div>
         </div>
         {#if mismatched.length}
           <p class="mt-2 text-[12px] text-bad">
@@ -283,12 +282,12 @@
       {/if}
     </section>
   {:else}
-    <section class="mt-4 rounded border border-line bg-panel/90 p-5">
-      <h2 class="title text-[14px]">Your Diablo II folder</h2>
+    <section class="mt-4 card p-5">
+      <h2 class="title text-[12px] tracking-[0.08em] !text-[#c9b48a]">YOUR DIABLO II FOLDER</h2>
       {#if !o?.base}
         <p class="mt-2 text-[13px] text-body">Diablo II wasn't found. Choose the folder where Diablo II and Lord of Destruction are installed.</p>
       {:else}
-        <p class="mt-2 truncate text-[13px] text-title" title={o.base}>{o.base}</p>
+        <p class="mt-2 truncate text-[13.5px] text-parchment" title={o.base}>{o.base}</p>
         {#if o.baseError}
           <p class="mt-2 text-[12px] text-bad">{o.baseError}</p>
         {:else if o.report?.missing?.length}
@@ -303,35 +302,36 @@
         <p class="mt-2 text-[12px] text-date">{o.warning}</p>
       {/if}
       <button
-        class="title mt-4 flex items-center gap-2 rounded-[3px] border border-edge px-4 py-2 text-[12px] hover:border-muted"
+        class="btn-stone mt-4 flex h-9 items-center gap-2 px-4 text-[11px]"
         onclick={() => app.chooseBase()}
       >
         <Icon name="folder" size={14} />
-        {o?.base ? "Choose another folder" : "Choose folder"}
+        {o?.base ? "CHOOSE ANOTHER FOLDER" : "CHOOSE FOLDER"}
       </button>
     </section>
   {/if}
 
   {#if failure}
     <p class="mt-4 text-[12px] text-bad">{failure}</p>
+    <LogsLink />
   {/if}
 
   <div class="mt-8 flex items-center gap-4">
     {#if choice === "install"}
       <button
-        class="title rounded-[3px] bg-accent px-6 py-2 text-[13px] !text-white hover:brightness-125 disabled:opacity-50"
+        class="btn-stone primary h-[38px] px-6 text-[12px]"
         disabled={!setup?.available || !dir}
         onclick={() => (step = "keys")}
       >
-        Next
+        NEXT
       </button>
     {:else}
       <button
-        class="title rounded-[3px] bg-accent px-6 py-2 text-[13px] !text-white hover:brightness-125 disabled:opacity-50"
+        class="btn-stone primary h-[38px] px-6 text-[12px]"
         disabled={!app.baseReady || finishing}
         onclick={finish}
       >
-        Done
+        DONE
       </button>
       {#if !app.baseReady}
         <button class="title text-[12px] !text-muted hover:!text-title" onclick={finish}>Skip for now</button>
@@ -347,28 +347,28 @@
     stored only inside your game files on this computer.
   </p>
 
-  <section class="mt-6 grid max-w-xl gap-4 rounded border border-line bg-panel/90 p-5">
+  <section class="mt-6 grid max-w-xl gap-4 card p-5">
     <label class="grid gap-1.5">
-      <span class="text-[12px] text-body">Diablo II CD key</span>
-      <input type="text" class="h-9 rounded-[3px] border border-edge bg-panel px-2 font-mono text-[13px] uppercase" autocomplete="off" spellcheck="false" bind:value={classicKey} />
+      <span class="title text-[11px] tracking-[0.08em] !text-[#c9b48a]">DIABLO II CD KEY</span>
+      <input type="text" class="field h-9 px-2.5 font-mono text-[13px] uppercase" autocomplete="off" spellcheck="false" bind:value={classicKey} />
     </label>
     <label class="grid gap-1.5">
-      <span class="text-[12px] text-body">Lord of Destruction CD key</span>
-      <input type="text" class="h-9 rounded-[3px] border border-edge bg-panel px-2 font-mono text-[13px] uppercase" autocomplete="off" spellcheck="false" bind:value={expansionKey} />
+      <span class="title text-[11px] tracking-[0.08em] !text-[#c9b48a]">LORD OF DESTRUCTION CD KEY</span>
+      <input type="text" class="field h-9 px-2.5 font-mono text-[13px] uppercase" autocomplete="off" spellcheck="false" bind:value={expansionKey} />
     </label>
     <label class="grid gap-1.5">
-      <span class="text-[12px] text-body">Owner name</span>
-      <input type="text" class="h-9 rounded-[3px] border border-edge bg-panel px-2 text-[13px]" autocomplete="off" spellcheck="false" bind:value={owner} />
+      <span class="title text-[11px] tracking-[0.08em] !text-[#c9b48a]">OWNER NAME</span>
+      <input type="text" class="field h-9 px-2.5 text-[13px]" autocomplete="off" spellcheck="false" bind:value={owner} />
     </label>
   </section>
 
   <div class="mt-8 flex items-center gap-4">
     <button
-      class="title rounded-[3px] bg-accent px-6 py-2 text-[13px] !text-white hover:brightness-125 disabled:opacity-50"
+      class="btn-stone primary h-[38px] px-6 text-[12px]"
       disabled={!keysReady}
       onclick={install}
     >
-      Install
+      INSTALL
     </button>
     <button class="title text-[12px] !text-muted hover:!text-title" onclick={() => (step = "choose")}>Back</button>
   </div>
@@ -390,6 +390,7 @@
 
   {#if failure}
     <p class="mt-4 max-w-xl whitespace-pre-line text-[12px] text-bad">{failure}</p>
+    <LogsLink />
   {/if}
   {#if result?.warnings?.length}
     <ul class="mt-4 max-w-xl text-[12px] text-date">
@@ -401,16 +402,16 @@
 
   <div class="mt-8 flex items-center gap-4">
     {#if installing}
-      <button class="title rounded-[3px] border border-edge px-6 py-2 text-[13px] hover:border-muted" onclick={cancel}>Cancel</button>
+      <button class="btn-stone h-[38px] px-6 text-[12px]" onclick={cancel}>CANCEL</button>
     {:else if failure}
       <!-- Once the game is installed, its folder is no longer one to install into. -->
       {#if !result?.installed}
-        <button class="title rounded-[3px] bg-accent px-6 py-2 text-[13px] !text-white hover:brightness-125" onclick={install}>Try again</button>
+        <button class="btn-stone primary h-[38px] px-6 text-[12px]" onclick={install}>TRY AGAIN</button>
       {/if}
       <button class="title text-[12px] !text-muted hover:!text-title" onclick={() => (step = "choose")}>Back</button>
     {:else if allDone}
-      <button class="title rounded-[3px] bg-accent px-6 py-2 text-[13px] !text-white hover:brightness-125 disabled:opacity-50" disabled={finishing} onclick={finish}>
-        Play
+      <button class="btn-stone primary h-[38px] px-6 text-[12px]" disabled={finishing} onclick={finish}>
+        PLAY
       </button>
       {#if result && result.cacheBytes > 0 && !cacheCleared}
         <button class="title text-[12px] !text-muted hover:!text-title" onclick={clearCache}>

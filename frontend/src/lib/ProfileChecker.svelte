@@ -34,10 +34,10 @@
   }
 </script>
 
-<section class="flex h-full flex-col gap-4 p-6">
+<section class="flex h-full flex-col gap-4 px-9 pt-[30px] pb-6">
   <header>
-    <h1 class="text-xl font-semibold tracking-wide">Profile checker</h1>
-    <p class="mt-1 text-sm text-muted">
+    <h1 class="title text-[20px] tracking-[0.06em]">Profile checker</h1>
+    <p class="mt-1.5 text-[13.5px] text-body">
       For server teams: paste a server profile to check it against the specification. Every problem is listed at once.
     </p>
   </header>
@@ -45,7 +45,7 @@
   <div class="grid min-h-0 flex-1 grid-cols-[3fr_2fr] gap-4">
     <div class="flex min-h-0 flex-col gap-3">
       <textarea
-        class="min-h-0 flex-1 resize-none rounded border border-line bg-panel p-3 font-mono text-xs leading-relaxed outline-none focus:border-accent"
+        class="field min-h-0 flex-1 resize-none p-3 font-mono text-xs leading-relaxed"
         placeholder="Paste profile.json here"
         spellcheck="false"
         aria-label="Server profile JSON"
@@ -55,22 +55,22 @@
 
       <div class="flex gap-2">
         <button
-          class="rounded bg-accent px-4 py-2 text-sm font-medium hover:brightness-110 disabled:opacity-50"
+          class="btn-stone primary h-9 px-5 text-[12px]"
           onclick={check}
           disabled={checking || profile.trim() === ""}
         >
-          {checking ? "Checking…" : "Check"}
+          {checking ? "CHECKING…" : "CHECK"}
         </button>
-        <button class="rounded border border-line px-4 py-2 text-sm hover:border-muted" onclick={loadExample}>
-          Load example
+        <button class="btn-stone h-9 px-4 text-[12px]" onclick={loadExample}>
+          LOAD EXAMPLE
         </button>
-        <span class="self-center text-xs text-muted">Ctrl+Enter to check</span>
+        <span class="self-center text-[12px] text-muted">Ctrl+Enter to check</span>
       </div>
     </div>
 
-    <div class="min-h-0 overflow-auto rounded border border-line bg-panel p-4" aria-live="polite">
+    <div class="card min-h-0 overflow-auto p-4" aria-live="polite">
       {#if result === null}
-        <p class="text-sm text-muted">Results appear here.</p>
+        <p class="text-[13px] text-muted">Results appear here.</p>
       {:else if result.ok}
         <p class="font-medium text-ok">✓ {result.name} is a valid profile.</p>
       {:else}

@@ -61,6 +61,9 @@ type Input struct {
 	// State, when set, is the state.json the report holds instead of the
 	// file, such as one cut down to the server a report goes to.
 	State []byte
+	// NoState leaves state.json out: a server's report whose state couldn't
+	// be read, and so couldn't be cut down to that server.
+	NoState bool
 }
 
 // Item is one file in a report.
@@ -104,7 +107,7 @@ func Collect(in Input) []Item {
 	}
 	if in.State != nil {
 		items = append(items, Item{Name: "state.json", What: "Your launcher settings and choices", data: in.State, Size: int64(len(in.State))})
-	} else {
+	} else if !in.NoState {
 		add("state.json", "Your launcher settings and choices", filepath.Join(in.DataDir, "state.json"))
 	}
 

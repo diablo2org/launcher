@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import LogsLink from "./LogsLink.svelte";
   import RosettaPrompt from "./RosettaPrompt.svelte";
   import StepList from "./StepList.svelte";
   import { app } from "./state.svelte";
@@ -30,14 +31,15 @@
     {/if}
     {#if wine.error}
       <p class="mt-4 max-w-xl whitespace-pre-line text-[12px] text-bad">{wine.error}</p>
+      <LogsLink />
     {/if}
 
     <div class="mt-8 flex items-center gap-4">
       {#if wine.running}
-        <button class="title rounded-[3px] border border-edge px-6 py-2 text-[13px] hover:border-muted" onclick={() => wine.cancel()}>Cancel</button>
+        <button class="btn-stone h-[38px] px-6 text-[12px]" onclick={() => wine.cancel()}>CANCEL</button>
       {:else if !wine.done}
         {#if !wine.needsRosetta}
-          <button class="title rounded-[3px] bg-accent px-6 py-2 text-[13px] !text-white hover:brightness-125" onclick={run}>Try again</button>
+          <button class="btn-stone primary h-[38px] px-6 text-[12px]" onclick={run}>TRY AGAIN</button>
         {/if}
         <button class="title text-[12px] !text-muted hover:!text-title" onclick={() => app.leaveWineSetup()}>Back</button>
       {/if}

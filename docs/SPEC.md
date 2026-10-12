@@ -196,6 +196,11 @@ launcher can't do this for one.
   - `backgroundHasLogo`: set when the background art already shows the logo,
     so the launch screen doesn't draw it a second time. The logo is still
     used elsewhere, such as the server rail.
+  - `hideTabBar`: set to leave out the Launch / Ladder / Community bar on the
+    server's pages, for art that wants the whole window. The ladder, if any,
+    is then a button among the links; Community is already reachable as the
+    links themselves. Launchers older than the one that added it reject the
+    profile, so set `minLauncher` with it.
   - Images are cached, and verified when `sha256` is given. Servers cannot
     supply HTML, CSS, fonts or scripts; the layout is the same for every
     server.

@@ -55,41 +55,41 @@
 
 <svelte:window onkeydown={onKeydown} />
 
-<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70" role="presentation" onclick={(e) => e.target === e.currentTarget && close()}>
+<div class="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(3,2,2,0.78)]" role="presentation" onclick={(e) => e.target === e.currentTarget && close()}>
   <div
-    class="w-[520px] rounded border border-edge bg-[#0f0f11] px-8 py-6 shadow-[0_20px_80px_rgba(0,0,0,0.8)]"
+    class="frame-dialog w-[520px] px-[30px] pt-[18px] pb-6"
     role="dialog"
     aria-modal="true"
     aria-labelledby="add-link-title"
     bind:this={dialog}
   >
     {#if link.error}
-      <h2 id="add-link-title" class="title text-[18px]">This link can't be used</h2>
-      <p class="mt-3 text-[12px] text-muted">{link.error}</p>
+      <h2 id="add-link-title" class="title text-[19px]">This link can't be used</h2>
+      <p class="mt-3 text-[13.5px] text-body">{link.error}</p>
       <div class="mt-6 flex justify-end">
-        <button class="title rounded-[3px] border border-edge px-4 py-2 text-[12px] hover:border-muted" data-autofocus onclick={close}>Close</button>
+        <button class="btn-stone h-[38px] px-6 text-[12px]" data-autofocus onclick={close}>CLOSE</button>
       </div>
     {:else}
-      <h2 id="add-link-title" class="title text-[18px]">Add a server?</h2>
-      <p class="mt-3 text-[12px] text-muted">
-        A link asks to add the server described at <span class="text-title">{link.host}</span>. Servers added this way haven't been reviewed for the
+      <h2 id="add-link-title" class="title text-[19px]">Add a server?</h2>
+      <p class="mt-3 text-[13.5px] leading-[1.45] text-body">
+        A link asks to add the server described at <span class="text-gold">{link.host}</span>. Servers added this way haven't been reviewed for the
         catalog, so only add one you trust.
       </p>
-      <p class="mt-3 truncate text-[11px] text-dim" title={link.url}>{link.url}</p>
+      <p class="mt-3 truncate text-[12px] text-muted" title={link.url}>{link.url}</p>
       {#if error}
         <p class="mt-3 text-[12px] text-bad" role="alert">{error}</p>
       {/if}
-      <div class="mt-6 flex justify-end gap-3">
+      <div class="mt-6 flex justify-end gap-3.5">
         <button
-          class="title rounded-[3px] border border-edge px-4 py-2 text-[12px] hover:border-muted disabled:opacity-45"
+          class="btn-stone h-[38px] px-[22px] text-[12px]"
           data-autofocus
           disabled={adding}
-          onclick={close}>Cancel</button
+          onclick={close}>CANCEL</button
         >
         <button
-          class="title rounded-[3px] bg-accent px-4 py-2 text-[12px] !text-white hover:brightness-125 disabled:opacity-45"
+          class="btn-stone primary h-[38px] px-[26px] text-[12px]"
           disabled={adding}
-          onclick={add}>{adding ? "Adding…" : "Add server"}</button
+          onclick={add}>{adding ? "ADDING…" : "ADD SERVER"}</button
         >
       </div>
     {/if}

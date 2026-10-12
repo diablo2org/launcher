@@ -4,8 +4,10 @@
   import LadderView from "./lib/LadderView.svelte";
   import LaunchView from "./lib/LaunchView.svelte";
   import ProfileChecker from "./lib/ProfileChecker.svelte";
+  import ReportDialog from "./lib/ReportDialog.svelte";
   import Rail from "./lib/Rail.svelte";
   import SettingsModal from "./lib/SettingsModal.svelte";
+  import Toasts from "./lib/Toasts.svelte";
   import TopBar from "./lib/TopBar.svelte";
   import Welcome from "./lib/Welcome.svelte";
   import WineSetupPage from "./lib/WineSetupPage.svelte";
@@ -19,9 +21,11 @@
   const showBackground = $derived(app.page === "launch" || app.page === "ladder");
 
   function onKeydown(e: KeyboardEvent) {
-    if ((e.ctrlKey || e.metaKey) && ["1", "2", "3"].includes(e.key)) {
+    // Ctrl+1 to Ctrl+9, as far as servers can be pinned.
+    const n = Number(e.key);
+    if ((e.ctrlKey || e.metaKey) && Number.isInteger(n) && n >= 1 && n <= Math.min(9, app.maxPinned)) {
       e.preventDefault();
-      app.selectFavourite(Number(e.key) - 1);
+      app.selectFavourite(n - 1);
     }
   }
 </script>
@@ -49,6 +53,12 @@
     </div>
   {/each}
 
+  <!-- The launcher's own pages: the grey slate, darkened towards the edges. -->
+  <div class="pointer-events-none absolute inset-0 transition-opacity duration-500" class:opacity-0={showBackground} aria-hidden="true">
+    <div class="tex-slate absolute inset-0 opacity-55"></div>
+    <div class="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_38%,transparent_0%,rgba(6,6,6,0.85)_75%)]"></div>
+  </div>
+
   {#if app.page !== "welcome"}
     <Rail />
   {/if}
@@ -62,7 +72,7 @@
 
     <main class="min-h-0 flex-1">
       {#if app.error}
-        <p class="mx-8 mt-4 rounded border border-bad/50 bg-panel/90 p-3 text-[12px] text-bad" role="alert">{app.error}</p>
+        <p class="card mx-8 mt-4 !border-[#7a2a20] p-3 text-[13px] text-bad" role="alert">{app.error}</p>
       {/if}
 
       {#if app.page === "welcome"}
@@ -82,15 +92,21 @@
           {/if}
         {/key}
       {:else if app.current?.error}
-        <p class="mx-8 mt-6 rounded border border-bad/50 bg-panel/90 p-4 text-[13px] text-bad">{app.current.error}</p>
+        <p class="card mx-8 mt-6 !border-[#7a2a20] p-4 text-[13px] text-bad">{app.current.error}</p>
       {:else if !app.overview}
         <p class="px-8 pt-6 text-body">Loading…</p>
       {/if}
     </main>
+
+    <Toasts />
   </div>
 
   {#if app.settingsOpen}
     <SettingsModal />
+  {/if}
+
+  {#if app.report === "launcher" || (app.report === "server" && app.current?.profile)}
+    <ReportDialog />
   {/if}
 
   {#if app.link}

@@ -1,6 +1,6 @@
 <script lang="ts">
   // Small line icons, drawn inline so the launcher needs no icon font.
-  let { name, size = 16 }: { name: "gear" | "out" | "min" | "max" | "restore" | "close" | "grid" | "pin" | "check" | "folder" | "tool"; size?: number } = $props();
+  let { name, size = 16 }: { name: "gear" | "out" | "min" | "max" | "restore" | "close" | "grid" | "pin" | "check" | "folder" | "tool" | "rank"; size?: number } = $props();
 </script>
 
 <svg
@@ -36,6 +36,8 @@
     <path d="M5 12l5 5 9-10" />
   {:else if name === "folder"}
     <path d="M3 7a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z" />
+  {:else if name === "rank"}
+    <path d="M5 20v-7M12 20V5M19 20v-10M3 20h18" />
   {:else if name === "tool"}
     <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z" />
   {/if}

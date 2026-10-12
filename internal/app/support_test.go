@@ -10,6 +10,7 @@ import (
 	"github.com/diablo2org/launcher/internal/core"
 	"github.com/diablo2org/launcher/internal/launch"
 	"github.com/diablo2org/launcher/internal/logs"
+	"github.com/diablo2org/launcher/internal/report"
 	"github.com/diablo2org/launcher/internal/store"
 )
 
@@ -40,7 +41,7 @@ func TestSaveReport(t *testing.T) {
 		ShowFile: func(path string) error { shown = path; return nil },
 	})
 
-	path, err := s.SaveReport()
+	path, err := s.SaveReport("")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,8 +65,46 @@ func TestSaveReport(t *testing.T) {
 
 	// Cancelling saves nothing.
 	s.host.SaveFile = func(string, string) (string, error) { return "", nil }
-	if path, err := s.SaveReport(); path != "" || err != nil {
+	if path, err := s.SaveReport(""); path != "" || err != nil {
 		t.Errorf("cancelled: %q, %v", path, err)
+	}
+}
+
+// A launcher report holds no server's files; a server's holds only its own.
+func TestReportScope(t *testing.T) {
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := core.New(st, core.DirListing(t.TempDir()), launch.New(nil, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := NewSupportService(st, m, Host{})
+
+	if in := s.input(""); len(in.Servers) != 0 || in.State != nil {
+		t.Errorf("launcher report: servers %v, state cut %v", in.Servers, in.State != nil)
+	}
+	if in := s.input("resurgence"); len(in.Servers) != 1 || in.Servers[0] != "resurgence" {
+		t.Errorf("server report: servers %v", in.Servers)
+	}
+
+	// A state.json that can't be read can't be cut down to one server, so a
+	// server's report leaves it out; the launcher's still takes it.
+	os.WriteFile(filepath.Join(st.Dir(), "state.json"), []byte("{"), 0o644)
+	has := func(items []report.Item) bool {
+		for _, it := range items {
+			if it.Name == "state.json" {
+				return true
+			}
+		}
+		return false
+	}
+	if has(report.Collect(s.input("resurgence"))) {
+		t.Error("server report holds an unreadable state.json")
+	}
+	if !has(report.Collect(s.input(""))) {
+		t.Error("launcher report lost state.json")
 	}
 }
 

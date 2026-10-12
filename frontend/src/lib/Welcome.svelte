@@ -10,7 +10,7 @@
 
   const o = $derived(app.overview);
   const listed = $derived(app.servers.filter((s) => s.profile && s.verified));
-  const full = $derived(picked.length >= 3);
+  const full = $derived(picked.length >= app.maxPinned);
 
   function toggle(id: string) {
     if (picked.includes(id)) picked = picked.filter((p) => p !== id);
@@ -35,7 +35,7 @@
     {#if step === "game"}
       <GetDiablo picked={pickedInfo} onBack={() => (step = "servers")} onFinish={() => app.finishWelcome(picked)} />
     {:else}
-      <p class="text-[11px] text-muted">Step 1</p>
+      <p class="title text-[11px] tracking-[0.12em] !text-date">STEP 1</p>
       <h1 class="title mt-2 text-[26px]">Welcome</h1>
       <p class="mt-3 max-w-2xl text-[13px] leading-relaxed text-body">
         This launcher installs, updates and starts Diablo II private servers. Each server gets its own folder inside your Diablo II
@@ -44,7 +44,7 @@
 
       <h2 class="title mt-8 text-[18px]">Pick your servers</h2>
       <p class="mt-3 max-w-2xl text-[13px] leading-relaxed text-body">
-        Choose up to three to keep in the bar on the left, and switch between them with Ctrl+1, 2 and 3. You can change them any time
+        Choose up to {app.maxPinned} to keep in the bar on the left, and switch between them with Ctrl+1 to Ctrl+{Math.min(9, app.maxPinned)}. You can change them any time
         from All servers.
       </p>
 
@@ -62,30 +62,27 @@
           {@const data = app.server(s.id)}
           <li>
             <button
-              class={[
-                "flex h-full w-full items-start gap-3 rounded border p-4 text-left transition-colors disabled:opacity-40",
-                on ? "border-accent bg-accent/20" : "border-line bg-panel/90 hover:border-edge",
-              ]}
+              class="card pick flex h-full w-full items-start gap-3 p-4 text-left"
               aria-pressed={on}
               disabled={!on && full}
-              title={!on && full ? "Three servers can be pinned" : undefined}
+              title={!on && full ? `${app.maxPinned} servers can be pinned` : undefined}
               onclick={() => toggle(s.id)}
             >
-              <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded bg-raised">
+              <div class="link-tile flex items-center justify-center">
                 {#if data.branding.logo}
                   <img src={data.branding.logo} alt="" class="h-9 w-9 object-contain" />
                 {:else}
-                  <span class="title text-sm">{(s.profile?.name ?? s.id).slice(0, 2).toUpperCase()}</span>
+                  <span class="title text-[13px] !text-[#d9c49a]">{(s.profile?.name ?? s.id).slice(0, 2).toUpperCase()}</span>
                 {/if}
               </div>
               <div class="min-w-0 flex-1">
-                <p class="title truncate text-[14px]">{s.profile?.name ?? s.id}</p>
+                <p class="title truncate text-[14px] !text-parchment">{s.profile?.name ?? s.id}</p>
                 <p class="mt-0.5 text-[11px] text-muted">Diablo II {s.profile?.game.version}</p>
                 {#if s.profile?.summary}
                   <p class="mt-2 text-[12px] leading-snug text-body">{s.profile.summary}</p>
                 {/if}
               </div>
-              <span class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-[3px] border" class:border-accent={on} class:bg-accent={on} class:border-edge={!on}>
+              <span class={["mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border", on ? "mark-on" : "border-edge"]}>
                 {#if on}<Icon name="check" size={12} />{/if}
               </span>
             </button>
@@ -94,8 +91,8 @@
       </ul>
 
       <div class="mt-8 flex items-center gap-4">
-        <button class="title rounded-[3px] bg-accent px-6 py-2 text-[13px] !text-white hover:brightness-125" onclick={() => (step = "game")}>
-          {picked.length ? "Next" : "Skip for now"}
+        <button class="btn-stone primary h-[38px] px-6 text-[12px]" onclick={() => (step = "game")}>
+          {picked.length ? "NEXT" : "SKIP FOR NOW"}
         </button>
       </div>
     {/if}

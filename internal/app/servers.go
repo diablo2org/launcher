@@ -61,7 +61,9 @@ type Overview struct {
 	BaseError  string            `json:"baseError"`
 	Servers    []core.ServerInfo `json:"servers"`
 	Favourites []string          `json:"favourites"`
-	Error      string            `json:"error"`
+	// MaxFavourites is how many servers can be pinned to the rail.
+	MaxFavourites int    `json:"maxFavourites"`
+	Error         string `json:"error"`
 	// FirstRun asks the page to show the welcome screen.
 	FirstRun bool `json:"firstRun"`
 	// Wine is whether the game runs under Wine here, and if it's ready.
@@ -77,7 +79,7 @@ func (s *ServerService) Overview(ctx context.Context) Overview {
 	s.m.ImportLegacy(ctx, core.LegacyConfigPath())
 	s.m.DetectBase()
 
-	o := Overview{Base: s.m.Base(), Favourites: s.m.Favourites(), Servers: []core.ServerInfo{}, FirstRun: s.m.FirstRun(), Wine: s.m.WineStatus(ctx)}
+	o := Overview{Base: s.m.Base(), Favourites: s.m.Favourites(), MaxFavourites: core.MaxFavourites, Servers: []core.ServerInfo{}, FirstRun: s.m.FirstRun(), Wine: s.m.WineStatus(ctx)}
 	if err != nil {
 		slog.Warn("servers", "err", err)
 		o.Error = err.Error()

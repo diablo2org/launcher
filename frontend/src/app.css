@@ -1,32 +1,53 @@
 @import "tailwindcss";
 @import "@fontsource/cinzel/600.css";
 @import "@fontsource/cinzel/700.css";
-@import "@fontsource/roboto/400.css";
-@import "@fontsource/roboto/700.css";
+@import "@fontsource/alegreya-sans/400.css";
+@import "@fontsource/alegreya-sans/500.css";
+@import "@fontsource/alegreya-sans/700.css";
+@import "./parts.css";
 
-/* The launcher's palette, carried over from the SlashDiablo launcher. A
-   server's branding only ever replaces --color-accent, so every screen stays
-   readable whatever a server picks. */
+/* Stone and gold: dark neutral stone surfaces, gold edges and titles,
+   parchment text. Surfaces stay neutral grey so any server's art sits well
+   beside them. A server's branding only ever replaces --color-accent, so
+   every screen stays readable whatever a server picks. */
 @theme {
-  --color-ink: #0a0a0d;
-  --color-panel: #0c0c0c;
-  --color-raised: #121214;
-  --color-line: #161616;
-  --color-edge: #26242b;
-  --color-title: #c7cbd1;
-  --color-text: #e6e3df;
-  --color-muted: #676767;
-  --color-dim: #3b3b3b;
-  --color-date: #a19a97;
-  --color-body: #736c6a;
+  --color-ink: #0b0a09;
+  --color-panel: #0e0e0e;
+  --color-raised: #171615;
+  --color-line: #2b2519;
+  --color-edge: #4a3d27;
+  --color-title: #f0d79c;
+  --color-text: #e8e0cf;
+  --color-muted: #8f8676;
+  --color-dim: #5f574b;
+  --color-date: #a8875a;
+  --color-body: #a59a86;
   --color-accent: #5c0202;
-  --color-track: #1e1b26;
+  --color-track: #1d1813;
   --color-ok: #64d168;
-  --color-bad: #fa5757;
+  --color-bad: #f08a7a;
+
+  --color-parchment: #efe4c8;
+  --color-gold: #e2c98f;
+  --color-gold-line: #8a6e42;
+  --color-gold-mid: #c9a460;
+  --color-gold-press: #a8875a;
+  --color-play-edge: #b08a4c;
+  --color-link-icon: #e6c870;
+  --color-blood: #b3261e;
 
   --font-display: "Cinzel", "Georgia", serif;
-  --font-sans: "Roboto", "Segoe UI", system-ui, sans-serif;
+  --font-sans: "Alegreya Sans", "Segoe UI", system-ui, sans-serif;
   --font-mono: "Cascadia Mono", Consolas, monospace;
+}
+
+/* Surfaces. The slate is a fully desaturated D2R options background; the
+   stone is the middle of D2R's name-entry plate, the face of every button. */
+.tex-slate {
+  background: var(--color-panel) url("./assets/ui/slate.jpg") center / cover no-repeat;
+}
+.tex-stone {
+  background: #262626 url("./assets/ui/stone.png") center / cover;
 }
 
 html,
@@ -71,7 +92,7 @@ body {
   width: 8px;
 }
 ::-webkit-scrollbar-thumb {
-  background: #2a272e;
+  background: #4a3d27;
   border-radius: 4px;
 }
 ::-webkit-scrollbar-track {

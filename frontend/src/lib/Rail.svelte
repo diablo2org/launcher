@@ -1,11 +1,10 @@
 <script lang="ts">
-  import Icon from "./Icon.svelte";
   import { app } from "./state.svelte";
 
-  // The pinned servers, one click (or Ctrl+1..3) away. Empty slots lead to
-  // the catalog so it's clear there's room for three.
-  const slots = $derived([0, 1, 2].map((i) => app.favourites[i] ?? null));
+  // The pinned servers, one click (or Ctrl+1, 2, ...) away, then one "+" while
+  // there's room for another. Settings and All servers sit at the foot.
   const pinned = $derived(app.favourites.length);
+  const room = $derived(pinned < app.maxPinned);
 
   // A server opened from the catalog without pinning it gets a tile below.
   const transient = $derived(
@@ -19,6 +18,13 @@
       .join("")
       .slice(0, 2)
       .toUpperCase();
+  }
+
+  // Each tile shows a different patch of the stone, so no two look identical.
+  const patches = ["0px 0px", "-72px -24px", "-24px -120px", "-132px -84px", "-48px -60px", "-108px -150px", "-160px -10px", "-10px -170px"];
+  function patch(i: number): string {
+    const [fx, fy] = patches[i % patches.length].split(" ");
+    return `--fx: ${fx}; --fy: ${fy}`;
   }
 
   // Drag to reorder, like Discord's server list. dropAt is the gap the tile
@@ -74,97 +80,104 @@
   }
 </script>
 
+<!-- The gold bar beside whatever page is open. -->
+{#snippet bar(on: boolean)}
+  <span
+    class="absolute top-1/2 -left-[14px] h-[26px] w-1 -translate-y-1/2 rounded-r-[2px] bg-[#d9b56e] shadow-[0_0_8px_rgba(217,181,110,0.7)] transition-opacity"
+    class:opacity-0={!on}
+    aria-hidden="true"
+  ></span>
+{/snippet}
+
 {#snippet tile(id: string, index: number | null)}
   {@const info = app.info(id)}
   {@const data = app.server(id)}
   {@const active = app.selected === id && app.page !== "catalog" && app.page !== "checker"}
   {@const name = info?.profile?.name ?? id}
   <button
-    class="group relative flex h-14 w-14 items-center justify-center rounded-lg border transition-colors hover:border-edge"
-    class:border-edge={active}
-    class:border-line={!active}
-    class:bg-raised={active}
-    class:bg-[#0d0d10]={!active}
-    title={index !== null ? `${name} (Ctrl+${index + 1}, drag to reorder)` : name}
+    class="rail-btn group transition-opacity"
+    class:opacity-70={!active}
+    class:hover:opacity-100={!active}
+    style={patch(index ?? pinned)}
+    title={index !== null && index < 9 ? `${name} (Ctrl+${index + 1}, drag to reorder)` : name}
     aria-label={index !== null ? `${name}, pinned ${index + 1} of ${pinned}. Alt+Up or Alt+Down to move.` : name}
     aria-current={active ? "page" : undefined}
     onclick={() => app.select(id)}
     onkeydown={(e) => index !== null && onKeydown(e, index)}
   >
-    <span
-      class="absolute top-1/2 -left-2.5 h-8 w-1 -translate-y-1/2 rounded-r bg-title transition-opacity"
-      class:opacity-0={!active}
-      aria-hidden="true"
-    ></span>
+    {@render bar(active)}
     {#if data.branding.logo}
-      <img
-        src={data.branding.logo}
-        alt=""
-        draggable="false"
-        class="h-10 w-10 object-contain opacity-80 transition-opacity group-hover:opacity-100"
-        class:opacity-100={active}
-      />
+      <img src={data.branding.logo} alt="" draggable="false" class="relative h-[30px] w-[30px] object-contain" />
     {:else}
-      <span class="title text-sm" class:text-muted={!active}>{initials(name)}</span>
+      <span
+        class={[
+          "title relative text-[14px]",
+          active
+            ? "!text-[#f3dba0] [text-shadow:0_0_10px_rgba(240,190,90,0.55),0_1px_2px_#000]"
+            : "!text-[#9a8b70] [text-shadow:0_1px_2px_#000] group-hover:!text-parchment",
+        ]}
+      >{initials(name)}</span>
     {/if}
     {#if data.busy === "updating"}
-      <span class="absolute right-1 bottom-1 h-2 w-2 animate-pulse rounded-full bg-title" aria-label="Updating"></span>
+      <span class="absolute -right-1 -bottom-1 z-10 h-2.5 w-2.5 animate-pulse rounded-full border-2 border-[#0d0c0b] bg-[#d9b56e] shadow-[0_0_8px_rgba(217,181,110,0.9)]" aria-label="Updating"></span>
     {:else if data.status && !data.status.error && data.status.installed && !data.status.upToDate}
-      <span class="absolute right-1 bottom-1 h-2 w-2 rounded-full bg-accent ring-1 ring-title/50" aria-label="Update available"></span>
+      <span class="absolute -right-1 -bottom-1 z-10 h-2.5 w-2.5 rounded-full border-2 border-[#0d0c0b] bg-blood" aria-label="Update available"></span>
     {/if}
   </button>
 {/snippet}
 
-<nav class="drag relative z-10 flex h-full w-[76px] shrink-0 flex-col items-center gap-2 border-r border-line bg-[#070709] pt-4 pb-3" aria-label="Pinned servers">
-  {#each slots as id, i (id ?? `empty-${i}`)}
-    {#if id}
-      <div
-        class="no-drag relative transition-opacity"
-        class:opacity-40={dragFrom === i}
-        data-slot={i}
-        draggable="true"
-        role="listitem"
-        ondragstart={(e) => onDragStart(e, i)}
-        ondragover={(e) => onDragOver(e, i)}
-        ondrop={onDrop}
-        ondragend={endDrag}
-      >
-        {#if showGap(i)}
-          <span class="pointer-events-none absolute -top-[5px] right-0 left-0 h-[3px] rounded-full bg-title" aria-hidden="true"></span>
-        {/if}
-        {@render tile(id, i)}
-        {#if i === pinned - 1 && showGap(pinned)}
-          <span class="pointer-events-none absolute right-0 -bottom-[5px] left-0 h-[3px] rounded-full bg-title" aria-hidden="true"></span>
-        {/if}
-      </div>
-    {:else}
-      <div class="no-drag">
-        <button
-          class="flex h-14 w-14 items-center justify-center rounded-lg border border-dashed border-edge text-xl text-dim hover:border-muted hover:text-muted"
-          title="Pin a server"
-          aria-label="Pin a server"
-          onclick={() => (app.page = "catalog")}
-        >+</button>
-      </div>
-    {/if}
+<nav class="drag tex-slate relative z-10 flex h-full w-[76px] shrink-0 flex-col items-center gap-3 border-r border-[#3b2f1c] pt-4 pb-3.5" aria-label="Pinned servers">
+  {#each app.favourites as id, i (id)}
+    <div
+      class="no-drag relative transition-opacity"
+      class:opacity-40={dragFrom === i}
+      data-slot={i}
+      draggable="true"
+      role="listitem"
+      ondragstart={(e) => onDragStart(e, i)}
+      ondragover={(e) => onDragOver(e, i)}
+      ondrop={onDrop}
+      ondragend={endDrag}
+    >
+      {#if showGap(i)}
+        <span class="pointer-events-none absolute -top-[8px] right-0 left-0 h-[3px] rounded-full bg-gold" aria-hidden="true"></span>
+      {/if}
+      {@render tile(id, i)}
+      {#if i === pinned - 1 && showGap(pinned)}
+        <span class="pointer-events-none absolute right-0 -bottom-[8px] left-0 h-[3px] rounded-full bg-gold" aria-hidden="true"></span>
+      {/if}
+    </div>
   {/each}
 
+  {#if room}
+    <div class="no-drag">
+      <button class="rail-btn tool" style={patch(pinned + 1)} title="Pin a server" aria-label="Pin a server" onclick={() => (app.page = "catalog")}>
+        <span class="rail-icon plus" aria-hidden="true"></span>
+      </button>
+    </div>
+  {/if}
+
   {#if transient}
-    <div class="my-1 h-px w-8 bg-line" aria-hidden="true"></div>
+    <div class="my-0.5 h-px w-8 bg-gold-line/50" aria-hidden="true"></div>
     <div class="no-drag">{@render tile(transient, null)}</div>
   {/if}
 
   <div class="flex-1"></div>
 
-  <button
-    class="no-drag flex h-12 w-12 items-center justify-center rounded-lg hover:bg-raised"
-    class:text-title={app.page === "catalog"}
-    class:text-muted={app.page !== "catalog"}
-    title="All servers"
-    aria-label="All servers"
-    aria-current={app.page === "catalog" ? "page" : undefined}
-    onclick={() => (app.page = "catalog")}
-  >
-    <Icon name="grid" size={20} />
-  </button>
+  <div class="no-drag flex flex-col gap-3">
+    <button
+      class="rail-btn tool relative"
+      style={patch(pinned + 2)}
+      title="All servers"
+      aria-label="All servers"
+      aria-current={app.page === "catalog" ? "page" : undefined}
+      onclick={() => (app.page = "catalog")}
+    >
+      {@render bar(app.page === "catalog")}
+      <span class="rail-icon map" aria-hidden="true"></span>
+    </button>
+    <button class="rail-btn tool" style={patch(pinned + 3)} title="Settings" aria-label="Settings" onclick={() => (app.settingsOpen = true)}>
+      <span class="rail-icon cog" aria-hidden="true"></span>
+    </button>
+  </div>
 </nav>

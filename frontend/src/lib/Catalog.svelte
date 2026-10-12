@@ -1,10 +1,8 @@
 <script lang="ts">
-  import Icon from "./Icon.svelte";
   import { app } from "./state.svelte";
 
-  const full = $derived(app.favourites.length >= 3);
+  const full = $derived(app.favourites.length >= app.maxPinned);
 
-  let adding = $state(false);
   let addURL = $state("");
   let addError = $state("");
   let addBusy = $state(false);
@@ -14,10 +12,7 @@
     addBusy = true;
     addError = await app.addServer(addURL.trim());
     addBusy = false;
-    if (!addError) {
-      adding = false;
-      addURL = "";
-    }
+    if (!addError) addURL = "";
   }
 
   // Logos for every listed server, fetched once.
@@ -31,9 +26,10 @@
   });
 </script>
 
-<div class="h-full overflow-y-auto px-10 pt-6 pb-10">
-  <p class="max-w-2xl text-[13px] text-body">
-    Pin up to three servers to keep them in the bar on the left. Switch between them with a click or Ctrl+1, 2 and 3.
+<div class="h-full overflow-y-auto px-9 pt-[30px] pb-10">
+  <h1 class="title text-[20px] tracking-[0.06em]">All servers</h1>
+  <p class="mt-1.5 max-w-2xl text-[13.5px] text-body">
+    Pin up to {app.maxPinned} servers to keep them in the bar on the left. Switch between them with a click or Ctrl+1 to Ctrl+{Math.min(9, app.maxPinned)}.
   </p>
 
   {#if app.overview?.error}
@@ -44,100 +40,82 @@
     <p class="mt-6 text-body">No servers are listed yet.</p>
   {/if}
 
-  <ul class="mt-6 grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4">
+  <ul class="mt-[22px] grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4">
     {#each app.servers as s (s.id)}
       {@const pinned = app.favourites.includes(s.id)}
       {@const data = app.server(s.id)}
-      <li class="flex flex-col rounded border border-line bg-panel/90 p-4">
+      <li class="card flex min-h-[168px] flex-col p-3.5">
         <div class="flex items-start gap-3">
-          <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded bg-raised">
+          <span class="link-tile flex items-center justify-center" aria-hidden="true">
             {#if data.branding.logo}
-              <img src={data.branding.logo} alt="" class="h-10 w-10 object-contain" />
+              <img src={data.branding.logo} alt="" class="h-9 w-9 object-contain" />
             {:else}
-              <span class="title text-sm">{(s.profile?.name ?? s.id).slice(0, 2).toUpperCase()}</span>
+              <span class="title text-[13px] !text-[#d9c49a]">{(s.profile?.name ?? s.id).slice(0, 2).toUpperCase()}</span>
             {/if}
-          </div>
+          </span>
           <div class="min-w-0 flex-1">
-            <h2 class="title truncate text-[15px]">{s.profile?.name ?? s.id}</h2>
-            <p class="mt-0.5 text-[11px] text-muted">
-              {#if s.profile}Diablo II {s.profile.game.version}{/if}
+            <h2 class="title mt-0.5 truncate text-[15px] !text-parchment">{s.profile?.name ?? s.id}</h2>
+            <p class="mt-0.5 text-[11.5px] text-muted">
+              {#if s.profile}Diablo II {s.profile.game.version} ·{/if}
               {#if s.verified}
-                · <span class="text-date">Verified</span>
+                <span class="text-date">Verified</span>
               {:else}
-                · <span class="text-bad/80" title="Added by URL. Not reviewed for the listing.">Not verified</span>
+                <span class="text-[#d0786c]" title="Added by URL. Not reviewed for the listing.">Not verified</span>
               {/if}
             </p>
           </div>
         </div>
 
         {#if s.error}
-          <p class="mt-3 text-[12px] text-bad">{s.error}</p>
+          <p class="mt-2.5 text-[12.5px] leading-[1.45] text-bad">{s.error}</p>
         {:else if s.profile?.summary}
-          <p class="mt-3 text-[12px] leading-snug text-body">{s.profile.summary}</p>
+          <p class="mt-2.5 text-[12.5px] leading-[1.45] text-body">{s.profile.summary}</p>
         {/if}
 
-        <div class="mt-auto flex gap-2 pt-4">
+        <div class="mt-auto flex gap-2 pt-3.5">
+          <button class="btn-stone primary h-8 flex-1 text-[11px] tracking-[0.12em]" disabled={!s.profile} onclick={() => app.select(s.id)}>OPEN</button>
           <button
-            class="title flex-1 rounded-[3px] bg-accent py-2 text-[12px] !text-white hover:brightness-125 disabled:opacity-50"
-            disabled={!s.profile}
-            onclick={() => app.select(s.id)}
-          >
-            Open
-          </button>
-          <button
-            class="title flex items-center gap-1.5 rounded-[3px] border border-edge px-3 py-2 text-[12px] hover:border-muted disabled:opacity-40"
+            class="btn-stone flex h-8 items-center gap-1.5 px-3 text-[11px] tracking-[0.08em]"
             aria-pressed={pinned}
             disabled={!s.profile || (!pinned && full)}
-            title={!pinned && full ? "Unpin a server first; three can be pinned" : undefined}
+            title={!pinned && full ? `Unpin a server first; ${app.maxPinned} can be pinned` : undefined}
             onclick={() => app.setFavourite(s.id, !pinned)}
           >
-            <Icon name={pinned ? "check" : "pin"} size={13} />
-            {pinned ? "Pinned" : "Pin"}
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width={pinned ? 1.6 : 1.4} aria-hidden="true">
+              {#if pinned}<path d="M2.5 6.5l2.5 2.5 4.5-6" />{:else}<path d="M4.5 1.5h3l-.5 3 2 2h-6l2-2z M6 6.5V11" />{/if}
+            </svg>
+            {pinned ? "PINNED" : "PIN"}
           </button>
           {#if !s.verified}
-            <button
-              class="title rounded-[3px] border border-edge px-3 py-2 text-[12px] hover:border-bad hover:!text-bad"
-              title="Forget this server. Its files are left in place."
-              onclick={() => app.removeServer(s.id)}
-            >
-              Remove
+            <button class="btn-stone danger h-8 px-3 text-[11px] tracking-[0.08em]" title="Forget this server. Its files are left in place." onclick={() => app.removeServer(s.id)}>
+              REMOVE
             </button>
           {/if}
         </div>
       </li>
     {/each}
-  </ul>
 
-  <section class="mt-8 max-w-2xl">
-    {#if !adding}
-      <button class="title text-[12px] !text-muted hover:!text-title" onclick={() => (adding = true)}>+ Add a server by URL</button>
-    {:else}
-      <form class="rounded border border-line bg-panel/90 p-4" onsubmit={add}>
-        <h2 class="title text-[13px]">Add a server by URL</h2>
-        <p class="mt-1 text-[12px] text-body">
-          For servers not in the list yet, such as a new or test server. Its team gives you the link. Servers added this way
-          haven't been reviewed.
-        </p>
-        <label class="mt-4 block text-[12px] text-muted">
-          Profile URL
+    <!-- Adding by URL is the grid's last card. -->
+    <li class="card min-h-[168px] border-dashed p-3.5">
+      <form onsubmit={add}>
+        <h2 class="title text-[14px] !text-parchment">Add a server by URL</h2>
+        <p class="mt-1 text-[12px] leading-[1.4] text-muted">For servers not in the list yet. Its team gives you the link; servers added this way haven't been reviewed.</p>
+        <label for="catalog-url" class="title mt-2.5 mb-1 block text-[10.5px] tracking-[0.08em] !text-[#c9b48a]">PROFILE URL</label>
+        <div class="flex gap-2">
           <input
-            class="mt-1 block h-9 w-full rounded-[3px] border border-edge bg-ink px-3 text-[13px] text-title"
+            id="catalog-url"
+            class="field h-8 min-w-0 flex-1 px-2.5 text-[12.5px]"
             placeholder="https://example.com/launcher/profile.json"
             required
             spellcheck="false"
             bind:value={addURL}
           />
-        </label>
-        {#if addError}
-          <p class="mt-3 text-[12px] text-bad" role="alert">{addError}</p>
-        {/if}
-        <div class="mt-4 flex gap-2">
-          <button class="title rounded-[3px] bg-accent px-4 py-2 text-[12px] !text-white hover:brightness-125 disabled:opacity-50" disabled={addBusy}>
-            {addBusy ? "Checking…" : "Add server"}
-          </button>
-          <button type="button" class="title rounded-[3px] border border-edge px-4 py-2 text-[12px]" onclick={() => (adding = false)}>Cancel</button>
+          <button class="btn-stone primary h-8 px-3.5 text-[11px]" disabled={addBusy}>{addBusy ? "…" : "ADD"}</button>
         </div>
+        {#if addError}
+          <p class="mt-2 text-[12px] text-bad" role="alert">{addError}</p>
+        {/if}
       </form>
-    {/if}
-  </section>
+    </li>
+  </ul>
 </div>
